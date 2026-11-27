@@ -72,7 +72,9 @@ import com.example.data.model.CurriculumCatalog
 import com.example.data.model.UiState
 import com.example.data.repository.AiTeacherRepository
 import com.example.data.repository.TextbookRepository
+import com.example.ui.screens.AdminPanelScreen
 import com.example.ui.screens.AiTeacherScreen
+import com.example.ui.screens.CoAdminLoginDialog
 import com.example.ui.screens.HomeDashboardScreen
 import com.example.ui.screens.LibraryScreen
 import com.example.ui.screens.OnboardingScreen
@@ -103,6 +105,7 @@ private object Routes {
     const val NOTES_VIDEOS = "notes_videos/{initialTab}"
     const val PLANNER_PROGRESS = "planner_progress"
     const val EDIT_PREFERENCES = "edit_preferences"
+    const val ADMIN_PANEL = "admin_panel"
 
     fun bookDetail(bookId: String) = "book_detail/$bookId"
     fun reader(bookId: String, chapterId: String) = "reader/$bookId/$chapterId"
@@ -217,10 +220,16 @@ private fun AuthenticatedTextbookShell(
     val assessments by mainViewModel.assessments.collectAsStateWithLifecycle()
     val announcements by mainViewModel.announcements.collectAsStateWithLifecycle()
     val savedMaterials by mainViewModel.savedMaterials.collectAsStateWithLifecycle()
+    val liveClasses by mainViewModel.liveClasses.collectAsStateWithLifecycle()
+    val coAdminSession by mainViewModel.coAdminSession.collectAsStateWithLifecycle()
+    val coAdmins by mainViewModel.coAdmins.collectAsStateWithLifecycle()
     val statusBanner by mainViewModel.statusBanner.collectAsStateWithLifecycle()
+
+    val hasAdminAccess = mainViewModel.isMainAdmin || coAdminSession != null
 
     val snackbarHostState = remember { SnackbarHostState() }
     var showNotificationsSheet by remember { mutableStateOf(false) }
+    var showCoAdminLoginDialog by remember { mutableStateOf(false) }
 
     LaunchedEffect(statusBanner) {
         if (!statusBanner.isNullOrBlank()) {
@@ -321,11 +330,21 @@ private fun AuthenticatedTextbookShell(
                         HomeDashboardScreen(
                             profile = profile,
                             textbooks = textbooks,
+                            liveClasses = liveClasses,
                             readingProgressList = readingProgressList,
                             quizAttempts = quizAttempts,
                             announcements = announcements,
                             isDarkMode = isDarkMode,
                             onToggleDarkMode = onToggleDarkMode,
+                            onSecretAdminTrigger = {
+                                if (hasAdminAccess) {
+                                    navController.navigate(Routes.ADMIN_PANEL) {
+                                        launchSingleTop = true
+                                    }
+                                } else {
+                                    showCoAdminLoginDialog = true
+                                }
+                            },
                             onOpenNotifications = { showNotificationsSheet = true },
                             onOpenBook = { bookId ->
                                 mainViewModel.selectBookForChapters(bookId)
@@ -379,21 +398,57 @@ private fun AuthenticatedTextbookShell(
                             personalNotes = personalNotes,
                             savedMaterials = savedMaterials,
                             isDarkMode = isDarkMode,
-                            isEducatorOrAdmin = mainViewModel.isEducatorOrAdmin,
-                            textbookCount = textbooks.size,
-                            materialCount = studyMaterials.size,
-                            assessmentCount = assessments.size,
+                            hasAdminAccess = hasAdminAccess,
+                            isMainAdmin = mainViewModel.isMainAdmin,
+                            onOpenAdminPanel = {
+                                navController.navigate(Routes.ADMIN_PANEL) {
+                                    launchSingleTop = true
+                                }
+                            },
                             onToggleDarkMode = onToggleDarkMode,
                             onEditPreferences = { navController.navigate(Routes.EDIT_PREFERENCES) },
                             onOpenPlannerAndProgress = { navController.navigate(Routes.PLANNER_PROGRESS) },
                             onOpenNotifications = { showNotificationsSheet = true },
                             onSelectPlan = { tier -> mainViewModel.selectSubscriptionPlan(tier) },
                             onDeleteNote = { noteId -> mainViewModel.deleteNote(noteId) },
+                            onSignOut = {
+                                signOutUser(credentialManager, scope)
+                            }
+                        )
+                    }
+
+                    composable(Routes.ADMIN_PANEL) {
+                        AdminPanelScreen(
+                            isMainAdmin = mainViewModel.isMainAdmin,
+                            coAdminSession = coAdminSession,
+                            coAdmins = coAdmins,
+                            liveClasses = liveClasses,
+                            videoLectures = studyMaterials.filter { it.category == "Video Lecture" },
+                            textbookCount = textbooks.size,
+                            assessmentCount = assessments.size,
+                            onBackToUserPanel = { navController.popBackStack() },
+                            onLockCoAdminSession = {
+                                mainViewModel.lockCoAdminSession {
+                                    navController.popBackStack()
+                                }
+                            },
+                            onCreateCoAdmin = { name, pass, done ->
+                                mainViewModel.createCoAdmin(name, pass, done)
+                            },
+                            onDeleteCoAdmin = { id -> mainViewModel.deleteCoAdmin(id) },
+                            onPublishLiveClass = { t, s, cls, tch, sch, zoom, mid, pc, liveNow, done ->
+                                mainViewModel.publishLiveClass(t, s, cls, tch, sch, zoom, mid, pc, liveNow, done)
+                            },
+                            onToggleLiveClassStatus = { id, liveNow ->
+                                mainViewModel.toggleLiveClassStatus(id, liveNow)
+                            },
+                            onDeleteLiveClass = { id -> mainViewModel.deleteLiveClass(id) },
+                            onPublishStudyMaterial = { t, cat, s, cls, ch, d, b, url, mins, prem, done ->
+                                mainViewModel.publishStudyMaterial(t, cat, s, cls, ch, d, b, url, mins, prem, done)
+                            },
+                            onDeleteStudyMaterial = { id -> mainViewModel.deleteStudyMaterial(id) },
                             onPublishTextbook = { title, subj, cls, cat, brd, med, desc, prem, chT, chB, done ->
                                 mainViewModel.publishTextbook(title, subj, cls, cat, brd, med, desc, prem, chT, chB, done)
-                            },
-                            onPublishMaterial = { t, cat, s, cls, ch, d, b, mins, prem, done ->
-                                mainViewModel.publishStudyMaterial(t, cat, s, cls, ch, d, b, mins, prem, done)
                             },
                             onPublishAssessment = { t, s, cls, m, dur, p, opts, ci, exp, done ->
                                 mainViewModel.publishQuickAssessment(t, s, cls, m, dur, p, opts, ci, exp, done)
@@ -401,10 +456,7 @@ private fun AuthenticatedTextbookShell(
                             onPublishAnnouncement = { t, b, cat, aud, done ->
                                 mainViewModel.publishAnnouncement(t, b, cat, aud, done)
                             },
-                            onSyncCatalogToCloud = { mainViewModel.syncStarterCurriculumToCloud() },
-                            onSignOut = {
-                                signOutUser(credentialManager, scope)
-                            }
+                            onSyncCatalogToCloud = { mainViewModel.syncStarterCurriculumToCloud() }
                         )
                     }
 
@@ -498,6 +550,7 @@ private fun AuthenticatedTextbookShell(
                     ) { entry ->
                         val tab = entry.arguments?.getInt("initialTab") ?: 0
                         StudyMaterialAndVideosScreen(
+                            liveClasses = liveClasses,
                             materials = studyMaterials,
                             savedMaterials = savedMaterials,
                             initialTab = tab,
@@ -540,6 +593,26 @@ private fun AuthenticatedTextbookShell(
                 }
             }
         }
+    }
+
+    // Co-Admin Name & Password Login Dialog (triggered by 5 taps on Home Textbook icon)
+    if (showCoAdminLoginDialog) {
+        CoAdminLoginDialog(
+            onDismiss = { showCoAdminLoginDialog = false },
+            onSubmit = { name, password, onError ->
+                mainViewModel.loginAsCoAdmin(
+                    name = name,
+                    password = password,
+                    onSuccess = {
+                        showCoAdminLoginDialog = false
+                        navController.navigate(Routes.ADMIN_PANEL) {
+                            launchSingleTop = true
+                        }
+                    },
+                    onError = onError
+                )
+            }
+        )
     }
 
     // Notifications & Announcements Sheet

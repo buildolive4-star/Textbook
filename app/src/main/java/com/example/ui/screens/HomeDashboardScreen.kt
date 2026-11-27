@@ -1,7 +1,11 @@
 package com.example.ui.screens
 
+import android.content.Intent
+import android.net.Uri
+import androidx.compose.foundation.Image
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
+import androidx.compose.foundation.interaction.MutableInteractionSource
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -17,12 +21,10 @@ import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.LazyRow
 import androidx.compose.foundation.lazy.items
-import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowForward
 import androidx.compose.material.icons.automirrored.filled.MenuBook
-import androidx.compose.material.icons.filled.Assignment
 import androidx.compose.material.icons.filled.AutoAwesome
 import androidx.compose.material.icons.filled.CalendarMonth
 import androidx.compose.material.icons.filled.DarkMode
@@ -34,6 +36,7 @@ import androidx.compose.material.icons.filled.PlayCircle
 import androidx.compose.material.icons.filled.Quiz
 import androidx.compose.material.icons.filled.Schedule
 import androidx.compose.material.icons.filled.TrendingUp
+import androidx.compose.material.icons.filled.Videocam
 import androidx.compose.material3.Badge
 import androidx.compose.material3.BadgedBox
 import androidx.compose.material3.Button
@@ -47,6 +50,11 @@ import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableIntStateOf
+import androidx.compose.runtime.mutableLongStateOf
+import androidx.compose.runtime.remember
+import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
@@ -54,11 +62,17 @@ import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.StrokeCap
 import androidx.compose.ui.graphics.vector.ImageVector
+import androidx.compose.ui.layout.ContentScale
+import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.testTag
+import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
+import com.example.R
+import com.example.data.firebase.CoAdminSecurity
 import com.example.data.model.Announcement
+import com.example.data.model.LiveClass
 import com.example.data.model.QuizAttempt
 import com.example.data.model.ReadingProgress
 import com.example.data.model.Textbook
@@ -69,6 +83,7 @@ import com.example.ui.components.TextbookCoverCard
 import com.example.ui.components.WeeklyActivityChart
 import com.example.ui.theme.AmberAccent
 import com.example.ui.theme.EmeraldSecondary
+import com.example.ui.theme.ErrorRed
 import com.example.ui.theme.NavyDark
 import com.example.ui.theme.NavyPrimary
 import com.example.ui.theme.SubjectEnglishColor
@@ -80,11 +95,13 @@ import com.example.ui.theme.SubjectSocialColor
 fun HomeDashboardScreen(
     profile: UserProfile?,
     textbooks: List<Textbook>,
+    liveClasses: List<LiveClass>,
     readingProgressList: List<ReadingProgress>,
     quizAttempts: List<QuizAttempt>,
     announcements: List<Announcement>,
     isDarkMode: Boolean,
     onToggleDarkMode: () -> Unit,
+    onSecretAdminTrigger: () -> Unit,
     onOpenNotifications: () -> Unit,
     onOpenBook: (String) -> Unit,
     onContinueReading: (bookId: String, chapterId: String) -> Unit,
@@ -94,9 +111,14 @@ fun HomeDashboardScreen(
     onOpenNotesAndVideos: (initialTab: Int) -> Unit,
     onOpenPlannerAndProgress: () -> Unit
 ) {
+    val context = LocalContext.current
+    var adminTapCount by remember { mutableIntStateOf(0) }
+    var lastTapTimeMs by remember { mutableLongStateOf(0L) }
+
     val progressByBook = readingProgressList.associateBy { it.bookId }
     val continueProgress = readingProgressList.firstOrNull()
     val fallbackBook = textbooks.firstOrNull()
+    val featuredLiveClass = liveClasses.firstOrNull { it.isLiveNow } ?: liveClasses.firstOrNull()
 
     val studentName = profile?.displayName?.substringBefore(" ") ?: "Scholar"
     val completedChaptersTotal = readingProgressList.sumOf { it.completedChapters.size }
@@ -121,7 +143,7 @@ fun HomeDashboardScreen(
         contentPadding = PaddingValues(horizontal = 16.dp, vertical = 14.dp),
         verticalArrangement = Arrangement.spacedBy(18.dp)
     ) {
-        // 1. Top Greeting Header
+        // 1. Top Textbook Brand Icon (5-Tap Secret Admin Trigger) + Greeting Header
         item {
             Row(
                 modifier = Modifier.fillMaxWidth(),
@@ -133,26 +155,40 @@ fun HomeDashboardScreen(
                     horizontalArrangement = Arrangement.spacedBy(12.dp),
                     modifier = Modifier.weight(1f)
                 ) {
-                    Box(
+                    // Top Textbook Icon — 5 taps opens Admin / Co-Admin Panel
+                    Surface(
                         modifier = Modifier
                             .size(48.dp)
-                            .clip(CircleShape)
-                            .background(
-                                Brush.linearGradient(listOf(NavyPrimary, EmeraldSecondary))
-                            ),
-                        contentAlignment = Alignment.Center
+                            .clip(RoundedCornerShape(14.dp))
+                            .clickable(
+                                interactionSource = remember { MutableInteractionSource() },
+                                indication = null
+                            ) {
+                                val now = System.currentTimeMillis()
+                                adminTapCount = if (now - lastTapTimeMs <= 2500L) adminTapCount + 1 else 1
+                                lastTapTimeMs = now
+                                if (adminTapCount >= 5) {
+                                    adminTapCount = 0
+                                    onSecretAdminTrigger()
+                                }
+                            }
+                            .testTag("home_textbook_icon_secret_trigger"),
+                        shape = RoundedCornerShape(14.dp),
+                        shadowElevation = 3.dp,
+                        color = NavyPrimary
                     ) {
-                        Text(
-                            text = studentName.take(1).uppercase(),
-                            style = MaterialTheme.typography.titleLarge,
-                            color = Color.White,
-                            fontWeight = FontWeight.Bold
+                        Image(
+                            painter = painterResource(id = R.drawable.app_icon_textbook),
+                            contentDescription = "Textbook Logo",
+                            contentScale = ContentScale.Crop,
+                            modifier = Modifier.fillMaxSize()
                         )
                     }
                     Column {
                         Text(
-                            text = "Hello, $studentName",
-                            style = MaterialTheme.typography.headlineSmall,
+                            text = "Textbook • Hi, $studentName",
+                            style = MaterialTheme.typography.titleLarge,
+                            fontWeight = FontWeight.Bold,
                             color = MaterialTheme.colorScheme.onBackground,
                             maxLines = 1,
                             overflow = TextOverflow.Ellipsis
@@ -228,6 +264,92 @@ fun HomeDashboardScreen(
                                 contentDescription = "Announcements & Notifications",
                                 tint = MaterialTheme.colorScheme.onBackground
                             )
+                        }
+                    }
+                }
+            }
+        }
+
+        // 1.5 Featured Live Zoom Class Banner (when scheduled/live by Admin or Co-Admin)
+        if (featuredLiveClass != null) {
+            item {
+                Card(
+                    shape = RoundedCornerShape(18.dp),
+                    colors = CardDefaults.cardColors(
+                        containerColor = if (featuredLiveClass.isLiveNow) ErrorRed.copy(alpha = 0.10f)
+                        else MaterialTheme.colorScheme.surface
+                    ),
+                    elevation = CardDefaults.cardElevation(defaultElevation = 2.dp),
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .testTag("home_live_zoom_banner")
+                ) {
+                    Row(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .padding(14.dp),
+                        verticalAlignment = Alignment.CenterVertically,
+                        horizontalArrangement = Arrangement.spacedBy(12.dp)
+                    ) {
+                        Box(
+                            modifier = Modifier
+                                .size(46.dp)
+                                .clip(RoundedCornerShape(14.dp))
+                                .background(if (featuredLiveClass.isLiveNow) ErrorRed else NavyPrimary),
+                            contentAlignment = Alignment.Center
+                        ) {
+                            Icon(Icons.Filled.Videocam, contentDescription = "Live Zoom Class", tint = Color.White)
+                        }
+                        Column(modifier = Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(2.dp)) {
+                            Row(horizontalArrangement = Arrangement.spacedBy(6.dp), verticalAlignment = Alignment.CenterVertically) {
+                                Surface(
+                                    shape = RoundedCornerShape(6.dp),
+                                    color = if (featuredLiveClass.isLiveNow) ErrorRed else AmberAccent
+                                ) {
+                                    Text(
+                                        text = if (featuredLiveClass.isLiveNow) "● LIVE ON ZOOM" else "UPCOMING ZOOM",
+                                        style = MaterialTheme.typography.labelSmall,
+                                        color = Color.White,
+                                        fontWeight = FontWeight.Bold,
+                                        modifier = Modifier.padding(horizontal = 6.dp, vertical = 2.dp)
+                                    )
+                                }
+                                Text(
+                                    text = featuredLiveClass.scheduleLabel,
+                                    style = MaterialTheme.typography.labelSmall,
+                                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                                    maxLines = 1
+                                )
+                            }
+                            Text(
+                                text = featuredLiveClass.title,
+                                style = MaterialTheme.typography.titleSmall,
+                                fontWeight = FontWeight.Bold,
+                                maxLines = 1,
+                                overflow = TextOverflow.Ellipsis
+                            )
+                            Text(
+                                text = "${featuredLiveClass.subject} • ${featuredLiveClass.teacherName}",
+                                style = MaterialTheme.typography.bodySmall,
+                                color = MaterialTheme.colorScheme.onSurfaceVariant
+                            )
+                        }
+                        Button(
+                            onClick = {
+                                if (CoAdminSecurity.isValidHttpsUrl(featuredLiveClass.zoomLink)) {
+                                    val intent = Intent(Intent.ACTION_VIEW, Uri.parse(featuredLiveClass.zoomLink))
+                                    context.startActivity(intent)
+                                } else {
+                                    onOpenNotesAndVideos(0)
+                                }
+                            },
+                            shape = RoundedCornerShape(12.dp),
+                            colors = ButtonDefaults.buttonColors(
+                                containerColor = if (featuredLiveClass.isLiveNow) ErrorRed else NavyPrimary
+                            ),
+                            contentPadding = PaddingValues(horizontal = 12.dp, vertical = 8.dp)
+                        ) {
+                            Text("Join", style = MaterialTheme.typography.labelLarge)
                         }
                     }
                 }
@@ -403,24 +525,24 @@ fun HomeDashboardScreen(
                     horizontalArrangement = Arrangement.spacedBy(10.dp)
                 ) {
                     LearningToolTile(
-                        icon = Icons.Filled.Assignment,
-                        title = "Online Exams",
-                        subtitle = "Timed Mock Tests",
-                        accent = SubjectSocialColor,
-                        onClick = onOpenPractice,
-                        modifier = Modifier
-                            .weight(1f)
-                            .testTag("tool_online_exams")
-                    )
-                    LearningToolTile(
-                        icon = Icons.Filled.Description,
-                        title = "Notes & PYQs",
-                        subtitle = "Formulas & Papers",
-                        accent = SubjectEnglishColor,
+                        icon = Icons.Filled.Videocam,
+                        title = "Live Classes",
+                        subtitle = if (liveClasses.isNotEmpty()) "${liveClasses.size} Zoom Live" else "Zoom Sessions",
+                        accent = ErrorRed,
                         onClick = { onOpenNotesAndVideos(0) },
                         modifier = Modifier
                             .weight(1f)
-                            .testTag("tool_notes_pyq")
+                            .testTag("tool_live_classes")
+                    )
+                    LearningToolTile(
+                        icon = Icons.Filled.PlayCircle,
+                        title = "Video Lectures",
+                        subtitle = "HD Concept Videos",
+                        accent = SubjectHindiColor,
+                        onClick = { onOpenNotesAndVideos(1) },
+                        modifier = Modifier
+                            .weight(1f)
+                            .testTag("tool_video_lectures")
                     )
                 }
                 Row(
@@ -428,14 +550,14 @@ fun HomeDashboardScreen(
                     horizontalArrangement = Arrangement.spacedBy(10.dp)
                 ) {
                     LearningToolTile(
-                        icon = Icons.Filled.PlayCircle,
-                        title = "Video Lectures",
-                        subtitle = "Concept Lessons",
-                        accent = SubjectHindiColor,
-                        onClick = { onOpenNotesAndVideos(1) },
+                        icon = Icons.Filled.Description,
+                        title = "Notes & PYQs",
+                        subtitle = "Formulas & Papers",
+                        accent = SubjectEnglishColor,
+                        onClick = { onOpenNotesAndVideos(2) },
                         modifier = Modifier
                             .weight(1f)
-                            .testTag("tool_video_lectures")
+                            .testTag("tool_notes_pyq")
                     )
                     LearningToolTile(
                         icon = Icons.Filled.CalendarMonth,

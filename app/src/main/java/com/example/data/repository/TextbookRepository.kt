@@ -2,13 +2,17 @@ package com.example.data.repository
 
 import android.content.Context
 import com.example.R
+import com.example.data.firebase.CoAdminSecurity
 import com.example.data.firebase.OperationType
 import com.example.data.firebase.handleFirestoreError
 import com.example.data.model.Announcement
 import com.example.data.model.Assessment
 import com.example.data.model.AiChatMessage
 import com.example.data.model.Chapter
+import com.example.data.model.CoAdminAccount
+import com.example.data.model.CoAdminSession
 import com.example.data.model.CurriculumCatalog
+import com.example.data.model.LiveClass
 import com.example.data.model.PersonalNote
 import com.example.data.model.QuestionItem
 import com.example.data.model.QuizAttempt
@@ -18,6 +22,8 @@ import com.example.data.model.StudyMaterial
 import com.example.data.model.StudyTask
 import com.example.data.model.Textbook
 import com.example.data.model.UserProfile
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.withContext
 import com.google.firebase.Firebase
 import com.google.firebase.auth.FirebaseAuth
 import com.google.firebase.auth.auth
@@ -694,6 +700,50 @@ class TextbookRepository(
         )
     }
 
+    fun observePublishedLiveClasses(userId: String): Flow<List<LiveClass>> = flow {
+        val path = "liveClasses"
+        emitAll(
+            db.collection("liveClasses")
+                .whereEqualTo("published", true)
+                .snapshots()
+                .map { snap ->
+                    snap.toObjects(LiveClass::class.java, DocumentSnapshot.ServerTimestampBehavior.ESTIMATE)
+                        .sortedWith(
+                            compareByDescending<LiveClass> { it.isLiveNow }
+                                .thenByDescending { it.updatedAt?.seconds ?: 0L }
+                        )
+                }
+                .logFirestoreErrors(userId, OperationType.LIST, path)
+        )
+    }
+
+    fun observeCoAdmins(userId: String): Flow<List<CoAdminAccount>> = flow {
+        val path = "coAdmins"
+        emitAll(
+            db.collection("coAdmins")
+                .snapshots()
+                .map { snap ->
+                    snap.toObjects(CoAdminAccount::class.java, DocumentSnapshot.ServerTimestampBehavior.ESTIMATE)
+                        .sortedByDescending { it.createdAt?.seconds ?: 0L }
+                }
+                .logFirestoreErrors(userId, OperationType.LIST, path)
+        )
+    }
+
+    fun observeCoAdminSession(userId: String): Flow<CoAdminSession?> = flow {
+        val path = "coAdminSessions/$userId"
+        emitAll(
+            db.collection("coAdminSessions").document(userId)
+                .snapshots()
+                .map { snap ->
+                    if (snap.exists()) {
+                        snap.toObject(CoAdminSession::class.java, DocumentSnapshot.ServerTimestampBehavior.ESTIMATE)
+                    } else null
+                }
+                .logFirestoreErrors(userId, OperationType.GET, path)
+        )
+    }
+
     // --- 8. Teacher & Admin Panel Cloud Publishing Operations ---
 
     suspend fun publishTextbookWithChapter(
@@ -775,26 +825,167 @@ class TextbookRepository(
         chapterTitle: String,
         description: String,
         contentBody: String,
+        videoUrl: String = "",
         videoDurationMinutes: Int,
         premiumOnly: Boolean
     ): Result<Unit> {
         var path = "studyMaterials"
         return try {
             val uid = requireUserId()
+            val cleanVideoUrl = videoUrl.trim()
+            if (cleanVideoUrl.isNotEmpty() && !CoAdminSecurity.isValidHttpsUrl(cleanVideoUrl)) {
+                return Result.failure(IllegalArgumentException("Please enter a valid https:// Cloudinary video link."))
+            }
             val docId = "mat_${UUID.randomUUID().toString().replace("-", "").take(10)}"
             path = "studyMaterials/$docId"
-            db.collection("studyMaterials").document(docId).set(
+            val payload = mutableMapOf<String, Any>(
+                "title" to title.trim().take(140),
+                "category" to category.take(50),
+                "subject" to subject.take(60),
+                "classLevel" to classLevel.take(30),
+                "chapterTitle" to chapterTitle.trim().ifBlank { "General" }.take(140),
+                "description" to description.trim().ifBlank { title.trim() }.take(600),
+                "contentBody" to contentBody.trim().ifBlank { title.trim() }.take(6000),
+                "videoDurationMinutes" to videoDurationMinutes.coerceIn(0, 240).toLong(),
+                "premiumOnly" to premiumOnly,
+                "published" to true,
+                "createdBy" to uid,
+                "createdAt" to FieldValue.serverTimestamp(),
+                "updatedAt" to FieldValue.serverTimestamp()
+            )
+            if (cleanVideoUrl.isNotEmpty()) {
+                payload["videoUrl"] = cleanVideoUrl
+            }
+            db.collection("studyMaterials").document(docId).set(payload).await()
+            Result.success(Unit)
+        } catch (e: CancellationException) {
+            throw e
+        } catch (e: Exception) {
+            handleFirestoreError(e, OperationType.CREATE, path)
+            Result.failure(e)
+        }
+    }
+
+    suspend fun deleteStudyMaterial(materialId: String): Result<Unit> {
+        val path = "studyMaterials/$materialId"
+        return try {
+            requireUserId()
+            db.collection("studyMaterials").document(materialId).delete().await()
+            Result.success(Unit)
+        } catch (e: CancellationException) {
+            throw e
+        } catch (e: Exception) {
+            handleFirestoreError(e, OperationType.DELETE, path)
+            Result.failure(e)
+        }
+    }
+
+    suspend fun publishLiveClass(
+        title: String,
+        subject: String,
+        classLevel: String,
+        teacherName: String,
+        scheduleLabel: String,
+        zoomLink: String,
+        meetingId: String = "",
+        passcode: String = "",
+        isLiveNow: Boolean = true
+    ): Result<Unit> {
+        var path = "liveClasses"
+        return try {
+            val uid = requireUserId()
+            val cleanZoom = zoomLink.trim()
+            if (!CoAdminSecurity.isValidHttpsUrl(cleanZoom)) {
+                return Result.failure(IllegalArgumentException("Please enter a valid https:// Zoom meeting link."))
+            }
+            val docId = "live_${UUID.randomUUID().toString().replace("-", "").take(10)}"
+            path = "liveClasses/$docId"
+            val payload = mutableMapOf<String, Any>(
+                "title" to title.trim().take(140),
+                "subject" to subject.trim().take(60),
+                "classLevel" to classLevel.trim().take(30),
+                "teacherName" to teacherName.trim().ifBlank { "Educator" }.take(80),
+                "scheduleLabel" to scheduleLabel.trim().ifBlank { "Live Now" }.take(80),
+                "zoomLink" to cleanZoom,
+                "meetingId" to meetingId.trim().take(40),
+                "passcode" to passcode.trim().take(40),
+                "isLiveNow" to isLiveNow,
+                "published" to true,
+                "createdBy" to uid,
+                "createdAt" to FieldValue.serverTimestamp(),
+                "updatedAt" to FieldValue.serverTimestamp()
+            )
+            db.collection("liveClasses").document(docId).set(payload).await()
+            Result.success(Unit)
+        } catch (e: CancellationException) {
+            throw e
+        } catch (e: Exception) {
+            handleFirestoreError(e, OperationType.CREATE, path)
+            Result.failure(e)
+        }
+    }
+
+    suspend fun toggleLiveClassStatus(liveId: String, isLiveNow: Boolean): Result<Unit> {
+        val path = "liveClasses/$liveId"
+        return try {
+            requireUserId()
+            db.collection("liveClasses").document(liveId).update(
                 mapOf(
-                    "title" to title.trim().take(140),
-                    "category" to category.take(50),
-                    "subject" to subject.take(60),
-                    "classLevel" to classLevel.take(30),
-                    "chapterTitle" to chapterTitle.trim().ifBlank { "General" }.take(140),
-                    "description" to description.trim().ifBlank { title.trim() }.take(600),
-                    "contentBody" to contentBody.trim().take(6000),
-                    "videoDurationMinutes" to videoDurationMinutes.coerceIn(0, 240).toLong(),
-                    "premiumOnly" to premiumOnly,
-                    "published" to true,
+                    "isLiveNow" to isLiveNow,
+                    "updatedAt" to FieldValue.serverTimestamp()
+                )
+            ).await()
+            Result.success(Unit)
+        } catch (e: CancellationException) {
+            throw e
+        } catch (e: Exception) {
+            handleFirestoreError(e, OperationType.UPDATE, path)
+            Result.failure(e)
+        }
+    }
+
+    suspend fun deleteLiveClass(liveId: String): Result<Unit> {
+        val path = "liveClasses/$liveId"
+        return try {
+            requireUserId()
+            db.collection("liveClasses").document(liveId).delete().await()
+            Result.success(Unit)
+        } catch (e: CancellationException) {
+            throw e
+        } catch (e: Exception) {
+            handleFirestoreError(e, OperationType.DELETE, path)
+            Result.failure(e)
+        }
+    }
+
+    // --- 9. Co-Admin Accounts & Cryptographic Session Login ---
+
+    suspend fun createCoAdmin(name: String, password: String): Result<Unit> {
+        var path = "coAdmins"
+        return try {
+            val uid = requireUserId()
+            val cleanName = name.trim().take(60)
+            val normName = CoAdminSecurity.normalizeName(cleanName)
+            val docId = CoAdminSecurity.buildCoAdminDocId(cleanName)
+            if (cleanName.length < 2 || docId.isEmpty()) {
+                return Result.failure(IllegalArgumentException("Enter a valid Co-Admin name (min 2 letters)."))
+            }
+            if (password.length < 4) {
+                return Result.failure(IllegalArgumentException("Password must be at least 4 characters."))
+            }
+            path = "coAdmins/$docId"
+            val (salt, proofDigest) = withContext(Dispatchers.Default) {
+                val s = CoAdminSecurity.generateSaltHex()
+                val proof = CoAdminSecurity.deriveAuthProof(password, s)
+                s to CoAdminSecurity.computeProofDigest(proof)
+            }
+            db.collection("coAdmins").document(docId).set(
+                mapOf(
+                    "name" to cleanName,
+                    "normalizedName" to normName,
+                    "passwordSalt" to salt,
+                    "proofDigest" to proofDigest,
+                    "active" to true,
                     "createdBy" to uid,
                     "createdAt" to FieldValue.serverTimestamp(),
                     "updatedAt" to FieldValue.serverTimestamp()
@@ -805,6 +996,83 @@ class TextbookRepository(
             throw e
         } catch (e: Exception) {
             handleFirestoreError(e, OperationType.CREATE, path)
+            Result.failure(e)
+        }
+    }
+
+    suspend fun deleteCoAdmin(coAdminId: String): Result<Unit> {
+        val path = "coAdmins/$coAdminId"
+        return try {
+            requireUserId()
+            db.collection("coAdmins").document(coAdminId).delete().await()
+            Result.success(Unit)
+        } catch (e: CancellationException) {
+            throw e
+        } catch (e: Exception) {
+            handleFirestoreError(e, OperationType.DELETE, path)
+            Result.failure(e)
+        }
+    }
+
+    suspend fun verifyAndActivateCoAdmin(name: String, password: String): Result<String> {
+        var path = "coAdmins"
+        return try {
+            val uid = requireUserId()
+            val docId = CoAdminSecurity.buildCoAdminDocId(name)
+            if (docId.isEmpty() || password.isBlank()) {
+                return Result.failure(IllegalArgumentException("Enter both Co-Admin Name and Password."))
+            }
+            path = "coAdmins/$docId"
+            val snap = db.collection("coAdmins").document(docId).get().await()
+            if (!snap.exists()) {
+                return Result.failure(IllegalArgumentException("Invalid Co-Admin name or password."))
+            }
+            val account = snap.toObject(CoAdminAccount::class.java)
+                ?: return Result.failure(IllegalArgumentException("Invalid Co-Admin record."))
+            if (!account.active) {
+                return Result.failure(IllegalArgumentException("This Co-Admin account has been disabled."))
+            }
+
+            val (derivedProof, matches) = withContext(Dispatchers.Default) {
+                val proof = CoAdminSecurity.deriveAuthProof(password, account.passwordSalt)
+                val digest = CoAdminSecurity.computeProofDigest(proof)
+                proof to CoAdminSecurity.constantTimeEquals(digest, account.proofDigest)
+            }
+            if (!matches) {
+                return Result.failure(IllegalArgumentException("Invalid Co-Admin name or password."))
+            }
+
+            // Write cryptographically verified Co-Admin session (re-verified server-side in firestore.rules!)
+            path = "coAdminSessions/$uid"
+            db.collection("coAdminSessions").document(uid).set(
+                mapOf(
+                    "uid" to uid,
+                    "coAdminId" to docId,
+                    "coAdminName" to account.name,
+                    "authProof" to derivedProof,
+                    "createdAt" to FieldValue.serverTimestamp()
+                )
+            ).await()
+            Result.success(account.name)
+        } catch (e: CancellationException) {
+            throw e
+        } catch (e: Exception) {
+            handleFirestoreError(e, OperationType.WRITE, path)
+            Result.failure(e)
+        }
+    }
+
+    suspend fun lockCoAdminSession(): Result<Unit> {
+        var path = "coAdminSessions"
+        return try {
+            val uid = requireUserId()
+            path = "coAdminSessions/$uid"
+            db.collection("coAdminSessions").document(uid).delete().await()
+            Result.success(Unit)
+        } catch (e: CancellationException) {
+            throw e
+        } catch (e: Exception) {
+            handleFirestoreError(e, OperationType.DELETE, path)
             Result.failure(e)
         }
     }

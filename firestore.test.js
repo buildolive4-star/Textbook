@@ -469,3 +469,159 @@ test("Shared catalog: Admin can publish textbooks/chapters/materials/assessments
   );
   await assertFails(studentDb.collection("assessments").get());
 });
+
+test("Co-Admin creation, cryptographic session verification, Cloudinary lectures, Zoom live classes & instant revocation", async () => {
+  const crypto = require("node:crypto");
+  const adminDb = testEnv
+    .authenticatedContext(ADMIN_UID, {
+      email: ADMIN_EMAIL,
+      email_verified: true,
+    })
+    .firestore();
+  const coAdminUserDb = testEnv.authenticatedContext(STUDENT_B).firestore();
+  const studentDb = testEnv.authenticatedContext(STUDENT_A).firestore();
+  const now = pastDate(3000);
+
+  // Derive client authProof (PBKDF2 hex) and server proofDigest (Base64 SHA-256 of UTF-8 authProof)
+  const salt = "a1b2c3d4e5f60718293a4b5c6d7e8f90";
+  const authProof = crypto
+    .pbkdf2Sync("TeacherPass#1", salt, 60000, 32, "sha256")
+    .toString("hex");
+  const proofDigest = crypto
+    .createHash("sha256")
+    .update(authProof, "utf8")
+    .digest("hex")
+    .toUpperCase();
+
+  // Regular student cannot create or list coAdmins
+  await assertFails(studentDb.collection("coAdmins").get());
+  await assertFails(
+    studentDb.collection("coAdmins").doc("coadmin_rahul_sir").set({
+      name: "Rahul Sir",
+      normalizedName: "rahul_sir",
+      passwordSalt: salt,
+      proofDigest,
+      active: true,
+      createdBy: STUDENT_A,
+      createdAt: now,
+      updatedAt: now,
+    })
+  );
+
+  // Main Admin creates Co-Admin "Rahul Sir"
+  await assertSucceeds(
+    adminDb.collection("coAdmins").doc("coadmin_rahul_sir").set({
+      name: "Rahul Sir",
+      normalizedName: "rahul_sir",
+      passwordSalt: salt,
+      proofDigest,
+      active: true,
+      createdBy: ADMIN_UID,
+      createdAt: now,
+      updatedAt: now,
+    })
+  );
+
+  // Wrong password proof MUST be rejected server-side
+  await assertFails(
+    coAdminUserDb.collection("coAdminSessions").doc(STUDENT_B).set({
+      uid: STUDENT_B,
+      coAdminId: "coadmin_rahul_sir",
+      coAdminName: "Rahul Sir",
+      authProof: "0000000000000000000000000000000000000000000000000000000000000000",
+      createdAt: now,
+    })
+  );
+
+  // Valid password proof activates Co-Admin session
+  await assertSucceeds(
+    coAdminUserDb.collection("coAdminSessions").doc(STUDENT_B).set({
+      uid: STUDENT_B,
+      coAdminId: "coadmin_rahul_sir",
+      coAdminName: "Rahul Sir",
+      authProof,
+      createdAt: now,
+    })
+  );
+
+  // Active Co-Admin can publish Cloudinary Video Lecture & Zoom Live Class
+  await assertSucceeds(
+    coAdminUserDb.collection("studyMaterials").doc("vid_cloud_1").set({
+      title: "Quadratic Equations Full Lecture",
+      category: "Video Lecture",
+      subject: "Mathematics",
+      classLevel: "Class 10",
+      chapterTitle: "Chapter 4",
+      description: "Cloudinary HD Video Lecture",
+      contentBody: "Discriminant formula and roots walkthrough.",
+      videoUrl: "https://res.cloudinary.com/demo/video/upload/sample.mp4",
+      videoDurationMinutes: 25,
+      premiumOnly: false,
+      published: true,
+      createdBy: STUDENT_B,
+      createdAt: now,
+      updatedAt: now,
+    })
+  );
+
+  await assertSucceeds(
+    coAdminUserDb.collection("liveClasses").doc("live_zoom_1").set({
+      title: "Live Maths Doubt Solving",
+      subject: "Mathematics",
+      classLevel: "Class 10",
+      teacherName: "Rahul Sir",
+      scheduleLabel: "Today • 6:00 PM IST",
+      zoomLink: "https://us05web.zoom.us/j/84512345678",
+      meetingId: "845 1234 5678",
+      passcode: "MATH10",
+      isLiveNow: true,
+      published: true,
+      createdBy: STUDENT_B,
+      createdAt: now,
+      updatedAt: now,
+    })
+  );
+
+  // Non-https Zoom link MUST be rejected
+  await assertFails(
+    coAdminUserDb.collection("liveClasses").doc("live_bad_url").set({
+      title: "Bad Link Class",
+      subject: "Science",
+      classLevel: "Class 10",
+      teacherName: "Rahul Sir",
+      scheduleLabel: "Now",
+      zoomLink: "javascript:alert(1)",
+      isLiveNow: true,
+      published: true,
+      createdBy: STUDENT_B,
+      createdAt: now,
+      updatedAt: now,
+    })
+  );
+
+  // Student reads published live classes with query filter
+  await assertSucceeds(
+    studentDb.collection("liveClasses").where("published", "==", true).get()
+  );
+
+  // Main Admin revokes Co-Admin -> Co-Admin write access immediately denied!
+  await assertSucceeds(
+    adminDb.collection("coAdmins").doc("coadmin_rahul_sir").delete()
+  );
+  await assertFails(
+    coAdminUserDb.collection("liveClasses").doc("live_after_revoke").set({
+      title: "Should Fail After Revoke",
+      subject: "Mathematics",
+      classLevel: "Class 10",
+      teacherName: "Rahul Sir",
+      scheduleLabel: "Tomorrow",
+      zoomLink: "https://zoom.us/j/999999999",
+      isLiveNow: false,
+      published: true,
+      createdBy: STUDENT_B,
+      createdAt: now,
+      updatedAt: now,
+    })
+  );
+});
+

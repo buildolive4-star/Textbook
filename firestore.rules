@@ -45,8 +45,19 @@ service cloud.firestore {
       return isSignedIn() && exists(/databases/$(database)/documents/teachers/$(request.auth.uid));
     }
 
+    function isActiveCoAdmin() {
+      return isSignedIn() &&
+        exists(/databases/$(database)/documents/coAdminSessions/$(request.auth.uid)) &&
+        exists(/databases/$(database)/documents/coAdmins/$(get(/databases/$(database)/documents/coAdminSessions/$(request.auth.uid)).data.coAdminId)) &&
+        get(/databases/$(database)/documents/coAdmins/$(get(/databases/$(database)/documents/coAdminSessions/$(request.auth.uid)).data.coAdminId)).data.active == true;
+    }
+
     function isEducator() {
-      return isAdmin() || isTeacher();
+      return isAdmin() || isTeacher() || isActiveCoAdmin();
+    }
+
+    function isHttpsUrl(val, maxLen) {
+      return val is string && val.size() >= 10 && val.size() <= maxLen && val.matches('^https://.*');
     }
 
     function isStringList(val, maxLen) {
@@ -190,9 +201,37 @@ service cloud.firestore {
         data.chapterTitle is string && data.chapterTitle.size() >= 1 && data.chapterTitle.size() <= 140 &&
         data.description is string && data.description.size() >= 1 && data.description.size() <= 600 &&
         data.contentBody is string && data.contentBody.size() >= 1 && data.contentBody.size() <= 6000 &&
+        (!('videoUrl' in data) || data.videoUrl == '' || isHttpsUrl(data.videoUrl, 1000)) &&
         data.videoDurationMinutes is int && data.videoDurationMinutes >= 0 && data.videoDurationMinutes <= 240 &&
         data.premiumOnly is bool &&
         data.published is bool &&
+        data.createdBy is string && data.createdBy.size() >= 1 && data.createdBy.size() <= 128 &&
+        data.createdAt is timestamp && data.createdAt <= request.time &&
+        data.updatedAt is timestamp && data.updatedAt <= request.time;
+    }
+
+    function isValidLiveClass(data) {
+      return data.title is string && data.title.size() >= 2 && data.title.size() <= 140 &&
+        data.subject is string && data.subject.size() >= 2 && data.subject.size() <= 60 &&
+        data.classLevel is string && data.classLevel.size() >= 2 && data.classLevel.size() <= 30 &&
+        data.teacherName is string && data.teacherName.size() >= 2 && data.teacherName.size() <= 80 &&
+        data.scheduleLabel is string && data.scheduleLabel.size() >= 2 && data.scheduleLabel.size() <= 80 &&
+        isHttpsUrl(data.zoomLink, 1000) &&
+        (!('meetingId' in data) || (data.meetingId is string && data.meetingId.size() <= 40)) &&
+        (!('passcode' in data) || (data.passcode is string && data.passcode.size() <= 40)) &&
+        data.isLiveNow is bool &&
+        data.published is bool &&
+        data.createdBy is string && data.createdBy.size() >= 1 && data.createdBy.size() <= 128 &&
+        data.createdAt is timestamp && data.createdAt <= request.time &&
+        data.updatedAt is timestamp && data.updatedAt <= request.time;
+    }
+
+    function isValidCoAdmin(data) {
+      return data.name is string && data.name.size() >= 2 && data.name.size() <= 60 &&
+        data.normalizedName is string && data.normalizedName.size() >= 2 && data.normalizedName.size() <= 60 &&
+        data.passwordSalt is string && data.passwordSalt.size() >= 16 && data.passwordSalt.size() <= 128 &&
+        data.proofDigest is string && data.proofDigest.size() >= 32 && data.proofDigest.size() <= 128 &&
+        data.active is bool &&
         data.createdBy is string && data.createdBy.size() >= 1 && data.createdBy.size() <= 128 &&
         data.createdAt is timestamp && data.createdAt <= request.time &&
         data.updatedAt is timestamp && data.updatedAt <= request.time;
@@ -533,7 +572,7 @@ service cloud.firestore {
         ]) &&
         incoming().keys().hasOnly([
           'title', 'category', 'subject', 'classLevel', 'chapterTitle',
-          'description', 'contentBody', 'videoDurationMinutes', 'premiumOnly',
+          'description', 'contentBody', 'videoUrl', 'videoDurationMinutes', 'premiumOnly',
           'published', 'createdBy', 'createdAt', 'updatedAt'
         ]) &&
         isValidStudyMaterial(incoming());
@@ -544,14 +583,46 @@ service cloud.firestore {
         incoming().createdBy == existing().createdBy &&
         incoming().createdAt == existing().createdAt && (
           isAdmin() ||
-          (isTeacher() && incoming().diff(existing()).affectedKeys().hasOnly([
+          ((isTeacher() || isActiveCoAdmin()) && incoming().diff(existing()).affectedKeys().hasOnly([
             'title', 'category', 'subject', 'classLevel', 'chapterTitle',
-            'description', 'contentBody', 'videoDurationMinutes', 'premiumOnly',
+            'description', 'contentBody', 'videoUrl', 'videoDurationMinutes', 'premiumOnly',
             'published', 'updatedAt'
           ]))
         );
 
       allow delete: if isValidId(materialId) && isEducator();
+    }
+
+    match /liveClasses/{liveId} {
+      allow get: if isSignedIn() && isValidId(liveId) && (existing().published == true || isEducator());
+      allow list: if isSignedIn() && (existing().published == true || isEducator());
+
+      allow create: if isValidId(liveId) &&
+        isEducator() &&
+        incoming().createdBy == request.auth.uid &&
+        incoming().keys().hasAll([
+          'title', 'subject', 'classLevel', 'teacherName', 'scheduleLabel',
+          'zoomLink', 'isLiveNow', 'published', 'createdBy', 'createdAt', 'updatedAt'
+        ]) &&
+        incoming().keys().hasOnly([
+          'title', 'subject', 'classLevel', 'teacherName', 'scheduleLabel',
+          'zoomLink', 'meetingId', 'passcode', 'isLiveNow', 'published',
+          'createdBy', 'createdAt', 'updatedAt'
+        ]) &&
+        isValidLiveClass(incoming());
+
+      allow update: if isSignedIn() &&
+        isValidId(liveId) &&
+        isValidLiveClass(incoming()) &&
+        incoming().createdBy == existing().createdBy &&
+        incoming().createdAt == existing().createdAt &&
+        isEducator() &&
+        incoming().diff(existing()).affectedKeys().hasOnly([
+          'title', 'subject', 'classLevel', 'teacherName', 'scheduleLabel',
+          'zoomLink', 'meetingId', 'passcode', 'isLiveNow', 'published', 'updatedAt'
+        ]);
+
+      allow delete: if isValidId(liveId) && isEducator();
     }
 
     match /assessments/{assessmentId} {
@@ -632,6 +703,52 @@ service cloud.firestore {
         incoming().createdAt == existing().createdAt &&
         incoming().diff(existing()).affectedKeys().hasOnly(['displayName', 'assignedSubjects']);
       allow delete: if isValidId(uid) && isAdmin();
+    }
+
+    // --- Co-Admin Accounts (Created & Revoked exclusively by Main Admin buildolive4@gmail.com) ---
+    match /coAdmins/{coAdminId} {
+      allow get: if isSignedIn() && isValidId(coAdminId);
+      allow list: if isBootstrappedAdmin();
+      allow create: if isValidId(coAdminId) &&
+        isBootstrappedAdmin() &&
+        incoming().createdBy == request.auth.uid &&
+        incoming().keys().hasAll([
+          'name', 'normalizedName', 'passwordSalt', 'proofDigest',
+          'active', 'createdBy', 'createdAt', 'updatedAt'
+        ]) &&
+        incoming().keys().hasOnly([
+          'name', 'normalizedName', 'passwordSalt', 'proofDigest',
+          'active', 'createdBy', 'createdAt', 'updatedAt'
+        ]) &&
+        isValidCoAdmin(incoming());
+      allow update: if isSignedIn() && isValidId(coAdminId) &&
+        isBootstrappedAdmin() &&
+        isValidCoAdmin(incoming()) &&
+        incoming().createdBy == existing().createdBy &&
+        incoming().createdAt == existing().createdAt &&
+        incoming().diff(existing()).affectedKeys().hasOnly([
+          'name', 'passwordSalt', 'proofDigest', 'active', 'updatedAt'
+        ]);
+      allow delete: if isValidId(coAdminId) && isBootstrappedAdmin();
+    }
+
+    // --- Cryptographically Verified Co-Admin Sessions ---
+    match /coAdminSessions/{uid} {
+      allow get: if isValidId(uid) && (isOwner(uid) || isBootstrappedAdmin());
+      allow list: if isBootstrappedAdmin();
+      allow create, update: if isValidId(uid) &&
+        isOwner(uid) &&
+        incoming().uid == uid &&
+        incoming().keys().hasAll(['uid', 'coAdminId', 'coAdminName', 'authProof', 'createdAt']) &&
+        incoming().keys().hasOnly(['uid', 'coAdminId', 'coAdminName', 'authProof', 'createdAt']) &&
+        incoming().coAdminId is string && isValidId(incoming().coAdminId) &&
+        incoming().coAdminName is string && incoming().coAdminName.size() >= 2 && incoming().coAdminName.size() <= 60 &&
+        incoming().authProof is string && incoming().authProof.size() >= 32 && incoming().authProof.size() <= 128 &&
+        incoming().createdAt is timestamp && incoming().createdAt <= request.time &&
+        exists(/databases/$(database)/documents/coAdmins/$(incoming().coAdminId)) &&
+        get(/databases/$(database)/documents/coAdmins/$(incoming().coAdminId)).data.active == true &&
+        hashing.sha256(incoming().authProof).toHexString() == get(/databases/$(database)/documents/coAdmins/$(incoming().coAdminId)).data.proofDigest;
+      allow delete: if isValidId(uid) && (isOwner(uid) || isBootstrappedAdmin());
     }
   }
 }

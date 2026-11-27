@@ -1,5 +1,9 @@
 package com.example.ui.screens
 
+import android.content.Intent
+import android.net.Uri
+import android.widget.MediaController
+import android.widget.VideoView
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
@@ -23,17 +27,22 @@ import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
+import androidx.compose.material.icons.automirrored.filled.OpenInNew
 import androidx.compose.material.icons.filled.Bookmark
 import androidx.compose.material.icons.filled.BookmarkBorder
+import androidx.compose.material.icons.filled.ContentCopy
 import androidx.compose.material.icons.filled.Description
 import androidx.compose.material.icons.filled.Pause
 import androidx.compose.material.icons.filled.PlayArrow
 import androidx.compose.material.icons.filled.PlayCircle
 import androidx.compose.material.icons.filled.Quiz
 import androidx.compose.material.icons.filled.Speed
+import androidx.compose.material.icons.filled.Videocam
 import androidx.compose.material3.Button
+import androidx.compose.material3.ButtonDefaults
 import androidx.compose.material3.Card
 import androidx.compose.material3.CardDefaults
+import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.FilterChip
 import androidx.compose.material3.Icon
@@ -61,12 +70,20 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.platform.LocalClipboardManager
+import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.platform.testTag
+import androidx.compose.ui.text.AnnotatedString
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
+import androidx.compose.ui.viewinterop.AndroidView
+import com.example.data.firebase.CoAdminSecurity
+import com.example.data.model.LiveClass
 import com.example.data.model.SavedMaterial
 import com.example.data.model.StudyMaterial
 import com.example.ui.theme.AmberAccent
 import com.example.ui.theme.EmeraldSecondary
+import com.example.ui.theme.ErrorRed
 import com.example.ui.theme.NavyDark
 import com.example.ui.theme.NavyPrimary
 import com.example.ui.theme.subjectColor
@@ -75,14 +92,18 @@ import kotlinx.coroutines.delay
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun StudyMaterialAndVideosScreen(
+    liveClasses: List<LiveClass>,
     materials: List<StudyMaterial>,
     savedMaterials: List<SavedMaterial>,
-    initialTab: Int = 0,
+    initialTab: Int = 0, // 0 = Live (Zoom), 1 = Video Lectures (Cloudinary), 2 = Notes & PYQs
     onBack: () -> Unit,
     onToggleSave: (material: StudyMaterial) -> Unit,
     onOpenPractice: () -> Unit
 ) {
-    var activeTab by remember(initialTab) { mutableIntStateOf(initialTab.coerceIn(0, 1)) }
+    val context = LocalContext.current
+    val clipboard = LocalClipboardManager.current
+
+    var activeTab by remember(initialTab) { mutableIntStateOf(initialTab.coerceIn(0, 2)) }
     var selectedCategory by remember { mutableStateOf("All") }
     var openedMaterial by remember { mutableStateOf<StudyMaterial?>(null) }
 
@@ -91,18 +112,18 @@ fun StudyMaterialAndVideosScreen(
         "All", "Formula Sheet", "Revision Notes", "Important Questions", "Previous Year Papers", "Chapter Notes"
     )
 
+    val videosList = remember(materials) {
+        materials.filter { it.category == "Video Lecture" }
+    }
     val notesList = remember(materials, selectedCategory) {
         materials.filter { it.category != "Video Lecture" }
             .filter { selectedCategory == "All" || it.category == selectedCategory }
-    }
-    val videosList = remember(materials) {
-        materials.filter { it.category == "Video Lecture" }
     }
 
     Scaffold(
         topBar = {
             TopAppBar(
-                title = { Text("Study Materials & Videos") },
+                title = { Text("Live Classes, Lectures & Notes") },
                 navigationIcon = {
                     IconButton(onClick = onBack) {
                         Icon(Icons.AutoMirrored.Filled.ArrowBack, contentDescription = "Back")
@@ -121,16 +142,24 @@ fun StudyMaterialAndVideosScreen(
                 Tab(
                     selected = activeTab == 0,
                     onClick = { activeTab = 0 },
-                    text = { Text("Notes & PYQs") }
+                    text = { Text("Live (Zoom)") },
+                    modifier = Modifier.testTag("tab_live_zoom")
                 )
                 Tab(
                     selected = activeTab == 1,
                     onClick = { activeTab = 1 },
-                    text = { Text("Video Lectures") }
+                    text = { Text("Lectures") },
+                    modifier = Modifier.testTag("tab_video_lectures")
+                )
+                Tab(
+                    selected = activeTab == 2,
+                    onClick = { activeTab = 2 },
+                    text = { Text("Notes & PYQs") },
+                    modifier = Modifier.testTag("tab_notes_pyq")
                 )
             }
 
-            if (activeTab == 0) {
+            if (activeTab == 2) {
                 LazyRow(
                     contentPadding = PaddingValues(horizontal = 16.dp, vertical = 10.dp),
                     horizontalArrangement = Arrangement.spacedBy(8.dp)
@@ -145,85 +174,222 @@ fun StudyMaterialAndVideosScreen(
                 }
             }
 
-            val itemsToShow = if (activeTab == 0) notesList else videosList
-
-            LazyColumn(
-                contentPadding = PaddingValues(16.dp),
-                verticalArrangement = Arrangement.spacedBy(12.dp)
-            ) {
-                items(itemsToShow, key = { it.id }) { item ->
-                    val isSaved = item.id in savedIds
-                    val accent = subjectColor(item.subject)
-                    Card(
-                        modifier = Modifier
-                            .fillMaxWidth()
-                            .clickable { openedMaterial = item },
-                        shape = RoundedCornerShape(18.dp),
-                        colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface),
-                        elevation = CardDefaults.cardElevation(defaultElevation = 2.dp)
-                    ) {
-                        Row(
-                            modifier = Modifier
-                                .fillMaxWidth()
-                                .padding(14.dp),
-                            verticalAlignment = Alignment.CenterVertically,
-                            horizontalArrangement = Arrangement.spacedBy(12.dp)
-                        ) {
-                            Box(
-                                modifier = Modifier
-                                    .size(52.dp)
-                                    .clip(RoundedCornerShape(14.dp))
-                                    .background(accent.copy(alpha = 0.14f)),
-                                contentAlignment = Alignment.Center
+            if (activeTab == 0) {
+                // Live Classes (Zoom)
+                LazyColumn(
+                    contentPadding = PaddingValues(16.dp),
+                    verticalArrangement = Arrangement.spacedBy(12.dp)
+                ) {
+                    if (liveClasses.isEmpty()) {
+                        item {
+                            Card(
+                                shape = RoundedCornerShape(18.dp),
+                                colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface),
+                                modifier = Modifier.fillMaxWidth()
                             ) {
-                                Icon(
-                                    imageVector = if (item.category == "Video Lecture") Icons.Filled.PlayCircle else Icons.Filled.Description,
-                                    contentDescription = item.category,
-                                    tint = accent,
-                                    modifier = Modifier.size(28.dp)
-                                )
+                                Column(
+                                    modifier = Modifier.padding(24.dp),
+                                    horizontalAlignment = Alignment.CenterHorizontally,
+                                    verticalArrangement = Arrangement.spacedBy(8.dp)
+                                ) {
+                                    Icon(Icons.Filled.Videocam, contentDescription = null, tint = NavyPrimary, modifier = Modifier.size(40.dp))
+                                    Text("No Live Zoom Classes Yet", style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.Bold)
+                                    Text(
+                                        text = "When your teachers or admin schedule a live Zoom class, it will appear here with a one-tap Join button.",
+                                        style = MaterialTheme.typography.bodySmall,
+                                        color = MaterialTheme.colorScheme.onSurfaceVariant
+                                    )
+                                }
                             }
-
-                            Column(
-                                modifier = Modifier.weight(1f),
-                                verticalArrangement = Arrangement.spacedBy(4.dp)
+                        }
+                    } else {
+                        items(liveClasses, key = { it.id }) { live ->
+                            val accent = subjectColor(live.subject)
+                            Card(
+                                shape = RoundedCornerShape(18.dp),
+                                colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface),
+                                elevation = CardDefaults.cardElevation(defaultElevation = 2.dp),
+                                modifier = Modifier.fillMaxWidth()
                             ) {
-                                Row(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
-                                    Surface(shape = RoundedCornerShape(6.dp), color = accent.copy(alpha = 0.12f)) {
+                                Column(
+                                    modifier = Modifier.padding(16.dp),
+                                    verticalArrangement = Arrangement.spacedBy(10.dp)
+                                ) {
+                                    Row(
+                                        modifier = Modifier.fillMaxWidth(),
+                                        horizontalArrangement = Arrangement.SpaceBetween,
+                                        verticalAlignment = Alignment.CenterVertically
+                                    ) {
+                                        Row(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+                                            Surface(
+                                                shape = RoundedCornerShape(8.dp),
+                                                color = if (live.isLiveNow) ErrorRed else AmberAccent.copy(alpha = 0.2f)
+                                            ) {
+                                                Text(
+                                                    text = if (live.isLiveNow) "● LIVE NOW" else "UPCOMING",
+                                                    style = MaterialTheme.typography.labelSmall,
+                                                    fontWeight = FontWeight.Bold,
+                                                    color = if (live.isLiveNow) Color.White else AmberAccent,
+                                                    modifier = Modifier.padding(horizontal = 8.dp, vertical = 3.dp)
+                                                )
+                                            }
+                                            Surface(shape = RoundedCornerShape(8.dp), color = accent.copy(alpha = 0.14f)) {
+                                                Text(
+                                                    text = live.subject,
+                                                    style = MaterialTheme.typography.labelSmall,
+                                                    color = accent,
+                                                    modifier = Modifier.padding(horizontal = 8.dp, vertical = 3.dp)
+                                                )
+                                            }
+                                        }
                                         Text(
-                                            text = item.category,
+                                            text = live.scheduleLabel,
                                             style = MaterialTheme.typography.labelSmall,
-                                            color = accent,
-                                            modifier = Modifier.padding(horizontal = 6.dp, vertical = 2.dp)
+                                            color = MaterialTheme.colorScheme.onSurfaceVariant
                                         )
                                     }
-                                    if (item.videoDurationMinutes > 0) {
-                                        Text(
-                                            text = "${item.videoDurationMinutes} min",
-                                            style = MaterialTheme.typography.labelSmall,
-                                            color = AmberAccent,
-                                            fontWeight = FontWeight.Bold
-                                        )
+
+                                    Text(live.title, style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.Bold)
+                                    Text(
+                                        text = "${live.classLevel} • Teacher: ${live.teacherName}",
+                                        style = MaterialTheme.typography.bodySmall,
+                                        color = MaterialTheme.colorScheme.onSurfaceVariant
+                                    )
+
+                                    if (live.meetingId.isNotBlank() || live.passcode.isNotBlank()) {
+                                        Surface(
+                                            shape = RoundedCornerShape(12.dp),
+                                            color = MaterialTheme.colorScheme.surfaceVariant,
+                                            modifier = Modifier.fillMaxWidth()
+                                        ) {
+                                            Row(
+                                                modifier = Modifier.padding(horizontal = 12.dp, vertical = 8.dp),
+                                                horizontalArrangement = Arrangement.SpaceBetween,
+                                                verticalAlignment = Alignment.CenterVertically
+                                            ) {
+                                                Column {
+                                                    if (live.meetingId.isNotBlank()) {
+                                                        Text("Meeting ID: ${live.meetingId}", style = MaterialTheme.typography.labelSmall, fontWeight = FontWeight.SemiBold)
+                                                    }
+                                                    if (live.passcode.isNotBlank()) {
+                                                        Text("Passcode: ${live.passcode}", style = MaterialTheme.typography.labelSmall)
+                                                    }
+                                                }
+                                                IconButton(onClick = {
+                                                    clipboard.setText(AnnotatedString("ID: ${live.meetingId} Passcode: ${live.passcode}"))
+                                                }) {
+                                                    Icon(Icons.Filled.ContentCopy, contentDescription = "Copy Zoom credentials", modifier = Modifier.size(18.dp))
+                                                }
+                                            }
+                                        }
+                                    }
+
+                                    Button(
+                                        onClick = {
+                                            if (CoAdminSecurity.isValidHttpsUrl(live.zoomLink)) {
+                                                val intent = Intent(Intent.ACTION_VIEW, Uri.parse(live.zoomLink))
+                                                context.startActivity(intent)
+                                            }
+                                        },
+                                        shape = RoundedCornerShape(14.dp),
+                                        colors = ButtonDefaults.buttonColors(
+                                            containerColor = if (live.isLiveNow) ErrorRed else NavyPrimary
+                                        ),
+                                        modifier = Modifier.fillMaxWidth().height(48.dp)
+                                    ) {
+                                        Icon(Icons.Filled.Videocam, contentDescription = null)
+                                        Spacer(modifier = Modifier.width(8.dp))
+                                        Text(if (live.isLiveNow) "Join Live Class on Zoom" else "Open Zoom Link")
                                     }
                                 }
-                                Text(
-                                    text = item.title,
-                                    style = MaterialTheme.typography.titleSmall,
-                                    fontWeight = FontWeight.Bold
-                                )
-                                Text(
-                                    text = "${item.subject} • ${item.classLevel} • ${item.chapterTitle}",
-                                    style = MaterialTheme.typography.bodySmall,
-                                    color = MaterialTheme.colorScheme.onSurfaceVariant
-                                )
                             }
+                        }
+                    }
+                }
+            } else {
+                val itemsToShow = if (activeTab == 1) videosList else notesList
 
-                            IconButton(onClick = { onToggleSave(item) }) {
-                                Icon(
-                                    imageVector = if (isSaved) Icons.Filled.Bookmark else Icons.Filled.BookmarkBorder,
-                                    contentDescription = "Bookmark",
-                                    tint = if (isSaved) AmberAccent else MaterialTheme.colorScheme.onSurfaceVariant
-                                )
+                LazyColumn(
+                    contentPadding = PaddingValues(16.dp),
+                    verticalArrangement = Arrangement.spacedBy(12.dp)
+                ) {
+                    items(itemsToShow, key = { it.id }) { item ->
+                        val isSaved = item.id in savedIds
+                        val accent = subjectColor(item.subject)
+                        val hasCloudVideo = CoAdminSecurity.isValidHttpsUrl(item.videoUrl)
+
+                        Card(
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .clickable { openedMaterial = item },
+                            shape = RoundedCornerShape(18.dp),
+                            colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface),
+                            elevation = CardDefaults.cardElevation(defaultElevation = 2.dp)
+                        ) {
+                            Row(
+                                modifier = Modifier
+                                    .fillMaxWidth()
+                                    .padding(14.dp),
+                                verticalAlignment = Alignment.CenterVertically,
+                                horizontalArrangement = Arrangement.spacedBy(12.dp)
+                            ) {
+                                Box(
+                                    modifier = Modifier
+                                        .size(52.dp)
+                                        .clip(RoundedCornerShape(14.dp))
+                                        .background(accent.copy(alpha = 0.14f)),
+                                    contentAlignment = Alignment.Center
+                                ) {
+                                    Icon(
+                                        imageVector = if (item.category == "Video Lecture") Icons.Filled.PlayCircle else Icons.Filled.Description,
+                                        contentDescription = item.category,
+                                        tint = accent,
+                                        modifier = Modifier.size(28.dp)
+                                    )
+                                }
+
+                                Column(
+                                    modifier = Modifier.weight(1f),
+                                    verticalArrangement = Arrangement.spacedBy(4.dp)
+                                ) {
+                                    Row(horizontalArrangement = Arrangement.spacedBy(6.dp), verticalAlignment = Alignment.CenterVertically) {
+                                        Surface(shape = RoundedCornerShape(6.dp), color = accent.copy(alpha = 0.12f)) {
+                                            Text(
+                                                text = if (hasCloudVideo) "Cloudinary HD" else item.category,
+                                                style = MaterialTheme.typography.labelSmall,
+                                                color = accent,
+                                                fontWeight = FontWeight.SemiBold,
+                                                modifier = Modifier.padding(horizontal = 6.dp, vertical = 2.dp)
+                                            )
+                                        }
+                                        if (item.videoDurationMinutes > 0) {
+                                            Text(
+                                                text = "${item.videoDurationMinutes} min",
+                                                style = MaterialTheme.typography.labelSmall,
+                                                color = AmberAccent,
+                                                fontWeight = FontWeight.Bold
+                                            )
+                                        }
+                                    }
+                                    Text(
+                                        text = item.title,
+                                        style = MaterialTheme.typography.titleSmall,
+                                        fontWeight = FontWeight.Bold
+                                    )
+                                    Text(
+                                        text = "${item.subject} • ${item.classLevel} • ${item.chapterTitle}",
+                                        style = MaterialTheme.typography.bodySmall,
+                                        color = MaterialTheme.colorScheme.onSurfaceVariant
+                                    )
+                                }
+
+                                IconButton(onClick = { onToggleSave(item) }) {
+                                    Icon(
+                                        imageVector = if (isSaved) Icons.Filled.Bookmark else Icons.Filled.BookmarkBorder,
+                                        contentDescription = "Bookmark",
+                                        tint = if (isSaved) AmberAccent else MaterialTheme.colorScheme.onSurfaceVariant
+                                    )
+                                }
                             }
                         }
                     }
@@ -232,16 +398,20 @@ fun StudyMaterialAndVideosScreen(
         }
     }
 
-    // Study Material / Interactive Video Lesson Sheet
+    // Study Material / Cloudinary Video Lecture Sheet
     openedMaterial?.let { item ->
         ModalBottomSheet(onDismissRequest = { openedMaterial = null }) {
             val isVideo = item.category == "Video Lecture"
+            val hasCloudVideo = isVideo && CoAdminSecurity.isValidHttpsUrl(item.videoUrl)
+
             var isPlaying by remember(item.id) { mutableStateOf(false) }
             var playbackSpeed by remember(item.id) { mutableFloatStateOf(1.0f) }
             var playbackProgress by remember(item.id) { mutableFloatStateOf(0.12f) }
+            var videoBuffering by remember(item.id) { mutableStateOf(hasCloudVideo) }
+            var videoLoadError by remember(item.id) { mutableStateOf(false) }
 
-            LaunchedEffect(isPlaying, playbackSpeed) {
-                while (isPlaying && playbackProgress < 1f) {
+            LaunchedEffect(isPlaying, playbackSpeed, hasCloudVideo) {
+                while (!hasCloudVideo && isPlaying && playbackProgress < 1f) {
                     delay((1000L / playbackSpeed).toLong())
                     playbackProgress = (playbackProgress + 0.02f).coerceAtMost(1f)
                 }
@@ -261,8 +431,75 @@ fun StudyMaterialAndVideosScreen(
                     color = EmeraldSecondary
                 )
 
-                if (isVideo) {
-                    // Interactive Concept Lesson Player Surface
+                if (hasCloudVideo) {
+                    // Real Cloudinary Video Stream Player
+                    Card(
+                        shape = RoundedCornerShape(18.dp),
+                        modifier = Modifier.fillMaxWidth()
+                    ) {
+                        Box(
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .height(220.dp)
+                                .background(Color.Black),
+                            contentAlignment = Alignment.Center
+                        ) {
+                            if (!videoLoadError) {
+                                AndroidView(
+                                    factory = { ctx ->
+                                        VideoView(ctx).apply {
+                                            val controller = MediaController(ctx)
+                                            controller.setAnchorView(this)
+                                            setMediaController(controller)
+                                            setVideoURI(Uri.parse(item.videoUrl))
+                                            setOnPreparedListener { mp ->
+                                                videoBuffering = false
+                                                mp.isLooping = false
+                                                start()
+                                            }
+                                            setOnErrorListener { _, _, _ ->
+                                                videoBuffering = false
+                                                videoLoadError = true
+                                                true
+                                            }
+                                        }
+                                    },
+                                    modifier = Modifier.fillMaxSize()
+                                )
+                            }
+                            if (videoBuffering && !videoLoadError) {
+                                CircularProgressIndicator(color = EmeraldSecondary)
+                            }
+                            if (videoLoadError) {
+                                Column(
+                                    horizontalAlignment = Alignment.CenterHorizontally,
+                                    verticalArrangement = Arrangement.spacedBy(8.dp),
+                                    modifier = Modifier.padding(16.dp)
+                                ) {
+                                    Text(
+                                        "In-app stream format unsupported. Open directly in browser.",
+                                        style = MaterialTheme.typography.bodySmall,
+                                        color = Color.White
+                                    )
+                                }
+                            }
+                        }
+                    }
+
+                    OutlinedButton(
+                        onClick = {
+                            val intent = Intent(Intent.ACTION_VIEW, Uri.parse(item.videoUrl))
+                            context.startActivity(intent)
+                        },
+                        shape = RoundedCornerShape(12.dp),
+                        modifier = Modifier.fillMaxWidth()
+                    ) {
+                        Icon(Icons.AutoMirrored.Filled.OpenInNew, contentDescription = null, modifier = Modifier.size(18.dp))
+                        Spacer(modifier = Modifier.width(8.dp))
+                        Text("Open Fullscreen Video (Cloudinary)")
+                    }
+                } else if (isVideo) {
+                    // Fallback Concept Walkthrough Player for Starter Lessons without Cloudinary URL
                     Card(
                         shape = RoundedCornerShape(18.dp),
                         modifier = Modifier.fillMaxWidth()

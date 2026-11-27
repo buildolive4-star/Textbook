@@ -177,12 +177,57 @@ data class StudyMaterial(
     val chapterTitle: String = "",
     val description: String = "",
     val contentBody: String = "",
+    val videoUrl: String = "",
     val videoDurationMinutes: Long = 0L,
     val premiumOnly: Boolean = false,
     val published: Boolean = true,
     val createdBy: String = "system",
     @ServerTimestamp val createdAt: Timestamp? = null,
     @ServerTimestamp val updatedAt: Timestamp? = null
+)
+
+@Keep
+@IgnoreExtraProperties
+data class LiveClass(
+    @DocumentId val id: String = "",
+    val title: String = "",
+    val subject: String = "Mathematics",
+    val classLevel: String = "Class 10",
+    val teacherName: String = "",
+    val scheduleLabel: String = "",
+    val zoomLink: String = "",
+    val meetingId: String = "",
+    val passcode: String = "",
+    val isLiveNow: Boolean = false,
+    val published: Boolean = true,
+    val createdBy: String = "system",
+    @ServerTimestamp val createdAt: Timestamp? = null,
+    @ServerTimestamp val updatedAt: Timestamp? = null
+)
+
+@Keep
+@IgnoreExtraProperties
+data class CoAdminAccount(
+    @DocumentId val id: String = "",
+    val name: String = "",
+    val normalizedName: String = "",
+    val passwordSalt: String = "",
+    val proofDigest: String = "",
+    val active: Boolean = true,
+    val createdBy: String = "",
+    @ServerTimestamp val createdAt: Timestamp? = null,
+    @ServerTimestamp val updatedAt: Timestamp? = null
+)
+
+@Keep
+@IgnoreExtraProperties
+data class CoAdminSession(
+    @DocumentId val id: String = "",
+    val uid: String = "",
+    val coAdminId: String = "",
+    val coAdminName: String = "",
+    val authProof: String = "",
+    @ServerTimestamp val createdAt: Timestamp? = null
 )
 
 @Keep

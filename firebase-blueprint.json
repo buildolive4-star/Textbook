@@ -212,6 +212,7 @@
         "chapterTitle": { "type": "string" },
         "description": { "type": "string" },
         "contentBody": { "type": "string" },
+        "videoUrl": { "type": "string", "description": "Optional HTTPS Cloudinary video stream URL" },
         "videoDurationMinutes": { "type": "integer" },
         "premiumOnly": { "type": "boolean" },
         "published": { "type": "boolean" },
@@ -279,6 +280,62 @@
         "createdAt": { "type": "string", "format": "date-time" }
       },
       "required": ["uid", "displayName", "assignedSubjects", "createdAt"]
+    },
+    "LiveClass": {
+      "title": "LiveClass",
+      "description": "Scheduled or live Zoom class session managed by Main Admin or Co-Admins.",
+      "type": "object",
+      "properties": {
+        "title": { "type": "string" },
+        "subject": { "type": "string" },
+        "classLevel": { "type": "string" },
+        "teacherName": { "type": "string" },
+        "scheduleLabel": { "type": "string" },
+        "zoomLink": { "type": "string" },
+        "meetingId": { "type": "string" },
+        "passcode": { "type": "string" },
+        "isLiveNow": { "type": "boolean" },
+        "published": { "type": "boolean" },
+        "createdBy": { "type": "string" },
+        "createdAt": { "type": "string", "format": "date-time" },
+        "updatedAt": { "type": "string", "format": "date-time" }
+      },
+      "required": [
+        "title", "subject", "classLevel", "teacherName", "scheduleLabel",
+        "zoomLink", "isLiveNow", "published", "createdBy", "createdAt", "updatedAt"
+      ]
+    },
+    "CoAdminAccount": {
+      "title": "CoAdminAccount",
+      "description": "Co-Admin account created by Main Admin with salted PBKDF2 hash digest.",
+      "type": "object",
+      "properties": {
+        "name": { "type": "string" },
+        "normalizedName": { "type": "string" },
+        "passwordSalt": { "type": "string" },
+        "proofDigest": { "type": "string" },
+        "active": { "type": "boolean" },
+        "createdBy": { "type": "string" },
+        "createdAt": { "type": "string", "format": "date-time" },
+        "updatedAt": { "type": "string", "format": "date-time" }
+      },
+      "required": [
+        "name", "normalizedName", "passwordSalt", "proofDigest",
+        "active", "createdBy", "createdAt", "updatedAt"
+      ]
+    },
+    "CoAdminSession": {
+      "title": "CoAdminSession",
+      "description": "Cryptographically verified Co-Admin session bound to a signed-in Google UID.",
+      "type": "object",
+      "properties": {
+        "uid": { "type": "string" },
+        "coAdminId": { "type": "string" },
+        "coAdminName": { "type": "string" },
+        "authProof": { "type": "string" },
+        "createdAt": { "type": "string", "format": "date-time" }
+      },
+      "required": ["uid", "coAdminId", "coAdminName", "authProof", "createdAt"]
     }
   },
   "firestore": {
@@ -337,6 +394,18 @@
     "/teachers/{uid}": {
       "schema": "RoleAssignment",
       "description": "Trusted teacher role registry."
+    },
+    "/liveClasses/{liveId}": {
+      "schema": "LiveClass",
+      "description": "Published Zoom live classes managed by Admin and Co-Admins."
+    },
+    "/coAdmins/{coAdminId}": {
+      "schema": "CoAdminAccount",
+      "description": "Co-Admin accounts created and managed exclusively by Main Admin."
+    },
+    "/coAdminSessions/{uid}": {
+      "schema": "CoAdminSession",
+      "description": "Verified Co-Admin active sessions granting educator permissions."
     }
   }
 }

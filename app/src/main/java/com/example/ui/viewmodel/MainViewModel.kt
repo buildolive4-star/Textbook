@@ -6,7 +6,10 @@ import androidx.lifecycle.viewModelScope
 import com.example.data.model.Announcement
 import com.example.data.model.Assessment
 import com.example.data.model.Chapter
+import com.example.data.model.CoAdminAccount
+import com.example.data.model.CoAdminSession
 import com.example.data.model.CurriculumCatalog
+import com.example.data.model.LiveClass
 import com.example.data.model.PersonalNote
 import com.example.data.model.QuizAttempt
 import com.example.data.model.ReadingProgress
@@ -43,7 +46,8 @@ class MainViewModel(
     initialEmail: String?
 ) : ViewModel() {
 
-    val isEducatorOrAdmin: Boolean = repository.isCurrentUserBootstrappedAdmin()
+    val isMainAdmin: Boolean = repository.isCurrentUserBootstrappedAdmin()
+    val isEducatorOrAdmin: Boolean get() = isMainAdmin || coAdminSession.value != null
 
     private val _statusBanner = MutableStateFlow<String?>(null)
     val statusBanner: StateFlow<String?> = _statusBanner.asStateFlow()
@@ -176,6 +180,37 @@ class MainViewModel(
                 emit(emptyList())
             }
             .stateIn(viewModelScope, SharingStarted.WhileSubscribed(STOP_TIMEOUT_MS), emptyList())
+
+    val liveClasses: StateFlow<List<LiveClass>> =
+        repository.observePublishedLiveClasses(currentUserId)
+            .catch { error ->
+                if (error is CancellationException && error.cause !is FirebaseFirestoreException) throw error
+                Log.w(TAG, "Live classes stream error", error)
+                emit(emptyList())
+            }
+            .stateIn(viewModelScope, SharingStarted.WhileSubscribed(STOP_TIMEOUT_MS), emptyList())
+
+    val coAdminSession: StateFlow<CoAdminSession?> =
+        repository.observeCoAdminSession(currentUserId)
+            .catch { error ->
+                if (error is CancellationException && error.cause !is FirebaseFirestoreException) throw error
+                emit(null)
+            }
+            .stateIn(viewModelScope, SharingStarted.WhileSubscribed(STOP_TIMEOUT_MS), null)
+
+    val coAdmins: StateFlow<List<CoAdminAccount>> =
+        if (isMainAdmin) {
+            repository.observeCoAdmins(currentUserId)
+                .catch { error ->
+                    if (error is CancellationException && error.cause !is FirebaseFirestoreException) throw error
+                    Log.w(TAG, "Co-Admins stream error", error)
+                    emit(emptyList())
+                }
+                .stateIn(viewModelScope, SharingStarted.WhileSubscribed(STOP_TIMEOUT_MS), emptyList())
+        } else {
+            flowOf(emptyList<CoAdminAccount>())
+                .stateIn(viewModelScope, SharingStarted.WhileSubscribed(STOP_TIMEOUT_MS), emptyList())
+        }
 
     fun selectBookForChapters(bookId: String) {
         _selectedBookIdForChapters.value = bookId
@@ -362,6 +397,7 @@ class MainViewModel(
         chapterTitle: String,
         description: String,
         contentBody: String,
+        videoUrl: String = "",
         videoDurationMinutes: Int,
         premiumOnly: Boolean,
         onComplete: () -> Unit
@@ -369,15 +405,114 @@ class MainViewModel(
         viewModelScope.launch {
             val res = repository.publishStudyMaterial(
                 title, category, subject, classLevel, chapterTitle,
-                description, contentBody, videoDurationMinutes, premiumOnly
+                description, contentBody, videoUrl, videoDurationMinutes, premiumOnly
             )
             if (res.isSuccess) {
                 _statusBanner.value = "$category published to students!"
                 onComplete()
             } else {
                 _statusBanner.value = res.exceptionOrNull()?.localizedMessage
-                    ?: "Requires Teacher or Admin permission."
+                    ?: "Requires Admin or Co-Admin permission."
             }
+        }
+    }
+
+    fun deleteStudyMaterial(materialId: String) {
+        viewModelScope.launch {
+            val res = repository.deleteStudyMaterial(materialId)
+            _statusBanner.value = if (res.isSuccess) "Material removed" else "Could not remove material"
+        }
+    }
+
+    fun publishLiveClass(
+        title: String,
+        subject: String,
+        classLevel: String,
+        teacherName: String,
+        scheduleLabel: String,
+        zoomLink: String,
+        meetingId: String,
+        passcode: String,
+        isLiveNow: Boolean,
+        onComplete: () -> Unit
+    ) {
+        viewModelScope.launch {
+            val res = repository.publishLiveClass(
+                title, subject, classLevel, teacherName, scheduleLabel,
+                zoomLink, meetingId, passcode, isLiveNow
+            )
+            if (res.isSuccess) {
+                _statusBanner.value = if (isLiveNow) "Zoom Live Class is LIVE now!" else "Zoom Live Class scheduled!"
+                onComplete()
+            } else {
+                _statusBanner.value = res.exceptionOrNull()?.localizedMessage
+                    ?: "Could not publish live class."
+            }
+        }
+    }
+
+    fun toggleLiveClassStatus(liveId: String, isLiveNow: Boolean) {
+        viewModelScope.launch {
+            val res = repository.toggleLiveClassStatus(liveId, isLiveNow)
+            if (res.isSuccess) {
+                _statusBanner.value = if (isLiveNow) "Class marked LIVE NOW" else "Class marked Upcoming"
+            }
+        }
+    }
+
+    fun deleteLiveClass(liveId: String) {
+        viewModelScope.launch {
+            val res = repository.deleteLiveClass(liveId)
+            _statusBanner.value = if (res.isSuccess) "Live class removed" else "Could not remove live class"
+        }
+    }
+
+    fun createCoAdmin(name: String, password: String, onComplete: () -> Unit) {
+        viewModelScope.launch {
+            val res = repository.createCoAdmin(name, password)
+            if (res.isSuccess) {
+                _statusBanner.value = "Co-Admin \"$name\" created! They can now unlock Admin Panel."
+                onComplete()
+            } else {
+                _statusBanner.value = res.exceptionOrNull()?.localizedMessage
+                    ?: "Only Main Admin (buildolive4@gmail.com) can create Co-Admins."
+            }
+        }
+    }
+
+    fun deleteCoAdmin(coAdminId: String) {
+        viewModelScope.launch {
+            val res = repository.deleteCoAdmin(coAdminId)
+            _statusBanner.value = if (res.isSuccess) {
+                "Co-Admin access revoked immediately."
+            } else {
+                res.exceptionOrNull()?.localizedMessage ?: "Failed to remove Co-Admin."
+            }
+        }
+    }
+
+    fun loginAsCoAdmin(
+        name: String,
+        password: String,
+        onSuccess: () -> Unit,
+        onError: (String) -> Unit
+    ) {
+        viewModelScope.launch {
+            val res = repository.verifyAndActivateCoAdmin(name, password)
+            if (res.isSuccess) {
+                _statusBanner.value = "Welcome, Co-Admin ${res.getOrNull().orEmpty()}!"
+                onSuccess()
+            } else {
+                onError(res.exceptionOrNull()?.localizedMessage ?: "Invalid Co-Admin name or password.")
+            }
+        }
+    }
+
+    fun lockCoAdminSession(onComplete: () -> Unit = {}) {
+        viewModelScope.launch {
+            repository.lockCoAdminSession()
+            _statusBanner.value = "Admin Panel locked. Switched to User Panel."
+            onComplete()
         }
     }
 
@@ -395,7 +530,7 @@ class MainViewModel(
                 onComplete()
             } else {
                 _statusBanner.value = res.exceptionOrNull()?.localizedMessage
-                    ?: "Requires Teacher or Admin permission."
+                    ?: "Requires Admin or Co-Admin permission."
             }
         }
     }
@@ -422,7 +557,7 @@ class MainViewModel(
                 onComplete()
             } else {
                 _statusBanner.value = res.exceptionOrNull()?.localizedMessage
-                    ?: "Requires Teacher or Admin permission."
+                    ?: "Requires Admin or Co-Admin permission."
             }
         }
     }

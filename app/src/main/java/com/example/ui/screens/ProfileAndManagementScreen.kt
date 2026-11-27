@@ -78,7 +78,7 @@ import com.example.ui.theme.ErrorRed
 import com.example.ui.theme.NavyDark
 import com.example.ui.theme.NavyPrimary
 
-private enum class ProfileSubPage { MAIN, SUBSCRIPTIONS, SAVED_AND_NOTES, EDUCATOR_STUDIO }
+private enum class ProfileSubPage { MAIN, SUBSCRIPTIONS, SAVED_AND_NOTES }
 
 @Composable
 fun ProfileAndManagementScreen(
@@ -86,35 +86,15 @@ fun ProfileAndManagementScreen(
     personalNotes: List<PersonalNote>,
     savedMaterials: List<SavedMaterial>,
     isDarkMode: Boolean,
-    isEducatorOrAdmin: Boolean,
-    textbookCount: Int,
-    materialCount: Int,
-    assessmentCount: Int,
+    hasAdminAccess: Boolean,
+    isMainAdmin: Boolean,
+    onOpenAdminPanel: () -> Unit,
     onToggleDarkMode: () -> Unit,
     onEditPreferences: () -> Unit,
     onOpenPlannerAndProgress: () -> Unit,
     onOpenNotifications: () -> Unit,
     onSelectPlan: (tierId: String) -> Unit,
     onDeleteNote: (noteId: String) -> Unit,
-    onPublishTextbook: (
-        title: String, subject: String, classLevel: String, category: String,
-        board: String, medium: String, description: String, premiumOnly: Boolean,
-        chapterTitle: String, chapterBody: String, onDone: () -> Unit
-    ) -> Unit,
-    onPublishMaterial: (
-        title: String, category: String, subject: String, classLevel: String,
-        chapterTitle: String, description: String, contentBody: String,
-        videoDurationMinutes: Int, premiumOnly: Boolean, onDone: () -> Unit
-    ) -> Unit,
-    onPublishAssessment: (
-        title: String, subject: String, classLevel: String, mode: String,
-        durationMinutes: Int, prompt: String, options: List<String>,
-        correctIndex: Int, explanation: String, onDone: () -> Unit
-    ) -> Unit,
-    onPublishAnnouncement: (
-        title: String, body: String, category: String, audience: String, onDone: () -> Unit
-    ) -> Unit,
-    onSyncCatalogToCloud: () -> Unit,
     onSignOut: () -> Unit
 ) {
     var subPage by remember { mutableStateOf(ProfileSubPage.MAIN) }
@@ -258,23 +238,21 @@ fun ProfileAndManagementScreen(
                     }
                 }
 
-                // Teacher & Admin Panel Access Card
-                item {
-                    Card(
-                        shape = RoundedCornerShape(18.dp),
-                        colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface)
-                    ) {
-                        ProfileRowItem(
-                            icon = Icons.Filled.AdminPanelSettings,
-                            title = "Teacher & Admin Studio",
-                            subtitle = if (isEducatorOrAdmin) {
-                                "Verified Admin Access • Publish books, notes, exams & alerts"
-                            } else {
-                                "Content management & catalog overview (Admin RBAC protected)"
-                            },
-                            accent = Color(0xFFBE123C),
-                            onClick = { subPage = ProfileSubPage.EDUCATOR_STUDIO }
-                        )
+                // Admin Panel Quick Access (shown only for verified Main Admin or unlocked Co-Admin; hidden from regular students)
+                if (hasAdminAccess) {
+                    item {
+                        Card(
+                            shape = RoundedCornerShape(18.dp),
+                            colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface)
+                        ) {
+                            ProfileRowItem(
+                                icon = Icons.Filled.AdminPanelSettings,
+                                title = if (isMainAdmin) "Main Admin Panel" else "Co-Admin Panel",
+                                subtitle = "Manage Zoom Live Classes, Cloudinary Lectures, Books & Co-Admins",
+                                accent = Color(0xFFBE123C),
+                                onClick = onOpenAdminPanel
+                            )
+                        }
                     }
                 }
 
@@ -336,21 +314,6 @@ fun ProfileAndManagementScreen(
                 savedMaterials = savedMaterials,
                 onBack = { subPage = ProfileSubPage.MAIN },
                 onDeleteNote = onDeleteNote
-            )
-        }
-
-        ProfileSubPage.EDUCATOR_STUDIO -> {
-            EducatorAdminStudioView(
-                isEducatorOrAdmin = isEducatorOrAdmin,
-                textbookCount = textbookCount,
-                materialCount = materialCount,
-                assessmentCount = assessmentCount,
-                onBack = { subPage = ProfileSubPage.MAIN },
-                onPublishTextbook = onPublishTextbook,
-                onPublishMaterial = onPublishMaterial,
-                onPublishAssessment = onPublishAssessment,
-                onPublishAnnouncement = onPublishAnnouncement,
-                onSyncCatalogToCloud = onSyncCatalogToCloud
             )
         }
     }
@@ -586,263 +549,6 @@ private fun SavedAndNotesView(
                     }
                 }
             }
-        }
-    }
-}
-
-@Composable
-private fun EducatorAdminStudioView(
-    isEducatorOrAdmin: Boolean,
-    textbookCount: Int,
-    materialCount: Int,
-    assessmentCount: Int,
-    onBack: () -> Unit,
-    onPublishTextbook: (
-        String, String, String, String, String, String, String, Boolean, String, String, () -> Unit
-    ) -> Unit,
-    onPublishMaterial: (
-        String, String, String, String, String, String, String, Int, Boolean, () -> Unit
-    ) -> Unit,
-    onPublishAssessment: (
-        String, String, String, String, Int, String, List<String>, Int, String, () -> Unit
-    ) -> Unit,
-    onPublishAnnouncement: (String, String, String, String, () -> Unit) -> Unit,
-    onSyncCatalogToCloud: () -> Unit
-) {
-    var tab by remember { mutableIntStateOf(0) } // 0 = Book, 1 = Material, 2 = Exam/Quiz, 3 = Alert
-
-    LazyColumn(
-        modifier = Modifier
-            .fillMaxSize()
-            .background(MaterialTheme.colorScheme.background),
-        contentPadding = PaddingValues(16.dp),
-        verticalArrangement = Arrangement.spacedBy(14.dp)
-    ) {
-        item {
-            Row(verticalAlignment = Alignment.CenterVertically) {
-                IconButton(onClick = onBack) {
-                    Icon(Icons.AutoMirrored.Filled.ArrowBack, contentDescription = "Back")
-                }
-                Text("Teacher & Admin Studio", style = MaterialTheme.typography.headlineSmall)
-            }
-        }
-
-        item {
-            Card(
-                shape = RoundedCornerShape(18.dp),
-                colors = CardDefaults.cardColors(
-                    containerColor = if (isEducatorOrAdmin) NavyPrimary else MaterialTheme.colorScheme.surfaceVariant
-                )
-            ) {
-                Column(modifier = Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
-                    Text(
-                        text = if (isEducatorOrAdmin) "Admin & Educator RBAC Active" else "Read-Only Preview (Student Account)",
-                        style = MaterialTheme.typography.titleMedium,
-                        fontWeight = FontWeight.Bold,
-                        color = if (isEducatorOrAdmin) Color.White else MaterialTheme.colorScheme.onSurface
-                    )
-                    Text(
-                        text = "Live Catalog: $textbookCount Textbooks • $materialCount Notes/Videos • $assessmentCount Quizzes & Exams",
-                        style = MaterialTheme.typography.bodySmall,
-                        color = if (isEducatorOrAdmin) Color.White.copy(alpha = 0.85f) else MaterialTheme.colorScheme.onSurfaceVariant
-                    )
-                    if (isEducatorOrAdmin) {
-                        Button(
-                            onClick = onSyncCatalogToCloud,
-                            colors = ButtonDefaults.buttonColors(containerColor = EmeraldSecondary),
-                            shape = RoundedCornerShape(12.dp)
-                        ) {
-                            Icon(Icons.Filled.CloudUpload, contentDescription = null)
-                            Spacer(modifier = Modifier.width(8.dp))
-                            Text("Sync Starter Curriculum to Firestore")
-                        }
-                    }
-                }
-            }
-        }
-
-        item {
-            TabRow(selectedTabIndex = tab) {
-                Tab(selected = tab == 0, onClick = { tab = 0 }, text = { Text("Book") })
-                Tab(selected = tab == 1, onClick = { tab = 1 }, text = { Text("Note/Vid") })
-                Tab(selected = tab == 2, onClick = { tab = 2 }, text = { Text("Quiz") })
-                Tab(selected = tab == 3, onClick = { tab = 3 }, text = { Text("Alert") })
-            }
-        }
-
-        item {
-            when (tab) {
-                0 -> PublishBookForm(enabled = isEducatorOrAdmin, onPublish = onPublishTextbook)
-                1 -> PublishMaterialForm(enabled = isEducatorOrAdmin, onPublish = onPublishMaterial)
-                2 -> PublishAssessmentForm(enabled = isEducatorOrAdmin, onPublish = onPublishAssessment)
-                else -> PublishAnnouncementForm(enabled = isEducatorOrAdmin, onPublish = onPublishAnnouncement)
-            }
-        }
-    }
-}
-
-@Composable
-private fun PublishBookForm(
-    enabled: Boolean,
-    onPublish: (String, String, String, String, String, String, String, Boolean, String, String, () -> Unit) -> Unit
-) {
-    var title by remember { mutableStateOf("") }
-    var subject by remember { mutableStateOf("Mathematics") }
-    var classLevel by remember { mutableStateOf("Class 10") }
-    var board by remember { mutableStateOf("CBSE") }
-    var desc by remember { mutableStateOf("") }
-    var chTitle by remember { mutableStateOf("") }
-    var chBody by remember { mutableStateOf("") }
-
-    Card(shape = RoundedCornerShape(18.dp), colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface)) {
-        Column(modifier = Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(10.dp)) {
-            Text("Publish New Digital Textbook", style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.Bold)
-            OutlinedTextField(value = title, onValueChange = { title = it }, label = { Text("Textbook Title") }, modifier = Modifier.fillMaxWidth())
-            LazyRow(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
-                items(CurriculumCatalog.allSubjects) { s ->
-                    FilterChip(selected = subject == s, onClick = { subject = s }, label = { Text(s) })
-                }
-            }
-            LazyRow(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
-                items(CurriculumCatalog.boards) { b ->
-                    FilterChip(selected = board == b, onClick = { board = b }, label = { Text(b) })
-                }
-            }
-            OutlinedTextField(value = classLevel, onValueChange = { classLevel = it }, label = { Text("Class (e.g. Class 10)") }, modifier = Modifier.fillMaxWidth())
-            OutlinedTextField(value = desc, onValueChange = { desc = it }, label = { Text("Book Description") }, modifier = Modifier.fillMaxWidth())
-            OutlinedTextField(value = chTitle, onValueChange = { chTitle = it }, label = { Text("Chapter 1 Title") }, modifier = Modifier.fillMaxWidth())
-            OutlinedTextField(value = chBody, onValueChange = { chBody = it }, label = { Text("Chapter 1 Content Paragraphs") }, minLines = 3, modifier = Modifier.fillMaxWidth())
-            Button(
-                onClick = {
-                    val cat = when {
-                        classLevel.contains("11") || classLevel.contains("12") -> "Class 11-12"
-                        classLevel.contains("9") || classLevel.contains("10") -> "Class 9-10"
-                        classLevel.contains("6") || classLevel.contains("7") || classLevel.contains("8") -> "Class 6-8"
-                        else -> "Class 1-5"
-                    }
-                    onPublish(title, subject, classLevel, cat, board, "English", desc, false, chTitle, chBody) {
-                        title = ""; desc = ""; chTitle = ""; chBody = ""
-                    }
-                },
-                enabled = enabled && title.length >= 2 && chTitle.length >= 2 && chBody.isNotBlank(),
-                modifier = Modifier.fillMaxWidth(),
-                shape = RoundedCornerShape(12.dp)
-            ) { Text("Publish Textbook to Cloud") }
-        }
-    }
-}
-
-@Composable
-private fun PublishMaterialForm(
-    enabled: Boolean,
-    onPublish: (String, String, String, String, String, String, String, Int, Boolean, () -> Unit) -> Unit
-) {
-    var title by remember { mutableStateOf("") }
-    var category by remember { mutableStateOf("Chapter Notes") }
-    var subject by remember { mutableStateOf("Science") }
-    var body by remember { mutableStateOf("") }
-
-    Card(shape = RoundedCornerShape(18.dp), colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface)) {
-        Column(modifier = Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(10.dp)) {
-            Text("Upload Study Material or Video Lesson", style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.Bold)
-            OutlinedTextField(value = title, onValueChange = { title = it }, label = { Text("Title") }, modifier = Modifier.fillMaxWidth())
-            LazyRow(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
-                items(listOf("Chapter Notes", "Formula Sheet", "Previous Year Papers", "Video Lecture")) { c ->
-                    FilterChip(selected = category == c, onClick = { category = c }, label = { Text(c) })
-                }
-            }
-            LazyRow(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
-                items(CurriculumCatalog.allSubjects) { s ->
-                    FilterChip(selected = subject == s, onClick = { subject = s }, label = { Text(s) })
-                }
-            }
-            OutlinedTextField(value = body, onValueChange = { body = it }, label = { Text("Notes / Lesson Summary Content") }, minLines = 3, modifier = Modifier.fillMaxWidth())
-            Button(
-                onClick = {
-                    onPublish(title, category, subject, "Class 10", "Chapter 1", title, body, if (category == "Video Lecture") 15 else 0, false) {
-                        title = ""; body = ""
-                    }
-                },
-                enabled = enabled && title.length >= 2 && body.isNotBlank(),
-                modifier = Modifier.fillMaxWidth(),
-                shape = RoundedCornerShape(12.dp)
-            ) { Text("Publish Study Material") }
-        }
-    }
-}
-
-@Composable
-private fun PublishAssessmentForm(
-    enabled: Boolean,
-    onPublish: (String, String, String, String, Int, String, List<String>, Int, String, () -> Unit) -> Unit
-) {
-    var title by remember { mutableStateOf("") }
-    var mode by remember { mutableStateOf("QUIZ") }
-    var subject by remember { mutableStateOf("Mathematics") }
-    var prompt by remember { mutableStateOf("") }
-    var optA by remember { mutableStateOf("") }
-    var optB by remember { mutableStateOf("") }
-    var optC by remember { mutableStateOf("") }
-    var optD by remember { mutableStateOf("") }
-    var explanation by remember { mutableStateOf("") }
-
-    Card(shape = RoundedCornerShape(18.dp), colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface)) {
-        Column(modifier = Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
-            Text("Create MCQ Quiz or Online Exam", style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.Bold)
-            Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                FilterChip(selected = mode == "QUIZ", onClick = { mode = "QUIZ" }, label = { Text("Practice Quiz") })
-                FilterChip(selected = mode == "EXAM", onClick = { mode = "EXAM" }, label = { Text("Online Exam") })
-            }
-            OutlinedTextField(value = title, onValueChange = { title = it }, label = { Text("Quiz / Exam Title") }, modifier = Modifier.fillMaxWidth())
-            OutlinedTextField(value = prompt, onValueChange = { prompt = it }, label = { Text("Question Prompt") }, modifier = Modifier.fillMaxWidth())
-            OutlinedTextField(value = optA, onValueChange = { optA = it }, label = { Text("Option A (Correct)") }, modifier = Modifier.fillMaxWidth())
-            OutlinedTextField(value = optB, onValueChange = { optB = it }, label = { Text("Option B") }, modifier = Modifier.fillMaxWidth())
-            OutlinedTextField(value = optC, onValueChange = { optC = it }, label = { Text("Option C") }, modifier = Modifier.fillMaxWidth())
-            OutlinedTextField(value = optD, onValueChange = { optD = it }, label = { Text("Option D") }, modifier = Modifier.fillMaxWidth())
-            OutlinedTextField(value = explanation, onValueChange = { explanation = it }, label = { Text("Answer Explanation") }, modifier = Modifier.fillMaxWidth())
-            Button(
-                onClick = {
-                    onPublish(title, subject, "Class 10", mode, 15, prompt, listOf(optA, optB, optC, optD), 0, explanation) {
-                        title = ""; prompt = ""; optA = ""; optB = ""; optC = ""; optD = ""; explanation = ""
-                    }
-                },
-                enabled = enabled && title.length >= 2 && prompt.isNotBlank() && optA.isNotBlank() && optB.isNotBlank(),
-                modifier = Modifier.fillMaxWidth(),
-                shape = RoundedCornerShape(12.dp)
-            ) { Text("Publish ${if (mode == "EXAM") "Exam" else "Quiz"}") }
-        }
-    }
-}
-
-@Composable
-private fun PublishAnnouncementForm(
-    enabled: Boolean,
-    onPublish: (String, String, String, String, () -> Unit) -> Unit
-) {
-    var title by remember { mutableStateOf("") }
-    var body by remember { mutableStateOf("") }
-    var audience by remember { mutableStateOf("ALL") }
-
-    Card(shape = RoundedCornerShape(18.dp), colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface)) {
-        Column(modifier = Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(10.dp)) {
-            Text("Broadcast Notification", style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.Bold)
-            OutlinedTextField(value = title, onValueChange = { title = it }, label = { Text("Notification Title") }, modifier = Modifier.fillMaxWidth())
-            OutlinedTextField(value = body, onValueChange = { body = it }, label = { Text("Announcement Message") }, minLines = 3, modifier = Modifier.fillMaxWidth())
-            LazyRow(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
-                items(listOf("ALL", "CLASS_10", "CBSE", "PREMIUM")) { aud ->
-                    FilterChip(selected = audience == aud, onClick = { audience = aud }, label = { Text(aud) })
-                }
-            }
-            Button(
-                onClick = {
-                    onPublish(title, body, "GENERAL", audience) {
-                        title = ""; body = ""
-                    }
-                },
-                enabled = enabled && title.length >= 2 && body.length >= 2,
-                modifier = Modifier.fillMaxWidth(),
-                shape = RoundedCornerShape(12.dp)
-            ) { Text("Send Announcement") }
         }
     }
 }
