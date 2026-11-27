@@ -65,6 +65,7 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import com.example.data.model.Assessment
 import com.example.data.model.QuizAttempt
+import com.example.ui.i18n.LocalAppStrings
 import com.example.ui.theme.AmberAccent
 import com.example.ui.theme.EmeraldSecondary
 import com.example.ui.theme.ErrorRed
@@ -105,6 +106,7 @@ fun QuizAndExamScreen(
         weakTopics: List<String>
     ) -> Unit
 ) {
+    val strings = LocalAppStrings.current
     var stage by remember { mutableStateOf<PracticeStage>(PracticeStage.Hub) }
     var hubTab by remember { mutableIntStateOf(0) } // 0 = Practice Quizzes, 1 = Online Exams
 
@@ -123,7 +125,7 @@ fun QuizAndExamScreen(
                     Column(modifier = Modifier.fillMaxWidth()) {
                         Column(modifier = Modifier.padding(horizontal = 16.dp, vertical = 14.dp)) {
                             Text(
-                                text = "Quiz & Examination Center",
+                                text = strings.quizExamCenter,
                                 style = MaterialTheme.typography.headlineSmall,
                                 color = MaterialTheme.colorScheme.onSurface
                             )
@@ -137,12 +139,12 @@ fun QuizAndExamScreen(
                             Tab(
                                 selected = hubTab == 0,
                                 onClick = { hubTab = 0 },
-                                text = { Text("Practice Quizzes") }
+                                text = { Text(strings.practiceQuizzes) }
                             )
                             Tab(
                                 selected = hubTab == 1,
                                 onClick = { hubTab = 1 },
-                                text = { Text("Online Exams") }
+                                text = { Text(strings.onlineExams) }
                             )
                         }
                     }

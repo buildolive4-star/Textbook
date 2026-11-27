@@ -9,8 +9,10 @@ import com.example.data.model.Chapter
 import com.example.data.model.CoAdminAccount
 import com.example.data.model.CoAdminSession
 import com.example.data.model.CurriculumCatalog
+import com.example.data.model.LeaderboardEntry
 import com.example.data.model.LiveClass
 import com.example.data.model.PersonalNote
+import com.example.data.model.QuestionItem
 import com.example.data.model.QuizAttempt
 import com.example.data.model.ReadingProgress
 import com.example.data.model.SavedMaterial
@@ -53,6 +55,7 @@ class MainViewModel(
     val statusBanner: StateFlow<String?> = _statusBanner.asStateFlow()
 
     private val _selectedBookIdForChapters = MutableStateFlow<String?>(null)
+    private val _selectedAssessmentIdForLeaderboard = MutableStateFlow<String?>(null)
 
     init {
         viewModelScope.launch {
@@ -212,8 +215,27 @@ class MainViewModel(
                 .stateIn(viewModelScope, SharingStarted.WhileSubscribed(STOP_TIMEOUT_MS), emptyList())
         }
 
+    val activeLeaderboard: StateFlow<List<LeaderboardEntry>> = _selectedAssessmentIdForLeaderboard
+        .flatMapLatest { assessmentId ->
+            if (assessmentId.isNullOrBlank()) {
+                flowOf(emptyList())
+            } else {
+                repository.observeTestLeaderboard(currentUserId, assessmentId)
+                    .catch { error ->
+                        if (error is CancellationException && error.cause !is FirebaseFirestoreException) throw error
+                        Log.w(TAG, "Leaderboard stream error for $assessmentId", error)
+                        emit(emptyList())
+                    }
+            }
+        }
+        .stateIn(viewModelScope, SharingStarted.WhileSubscribed(STOP_TIMEOUT_MS), emptyList())
+
     fun selectBookForChapters(bookId: String) {
         _selectedBookIdForChapters.value = bookId
+    }
+
+    fun selectAssessmentForLeaderboard(assessmentId: String) {
+        _selectedAssessmentIdForLeaderboard.value = assessmentId
     }
 
     fun clearBanner() {
@@ -334,14 +356,31 @@ class MainViewModel(
         correctCount: Int,
         incorrectCount: Int,
         unattemptedCount: Int,
+        obtainedMarks: Int,
+        maxMarks: Int,
         scorePercent: Int,
         durationSeconds: Int,
         weakTopics: List<String>
     ) {
+        _selectedAssessmentIdForLeaderboard.value = assessment.id
         viewModelScope.launch {
             val res = repository.recordQuizAttempt(
                 assessment, correctCount, incorrectCount, unattemptedCount,
                 scorePercent, durationSeconds, weakTopics
+            )
+            val profile = (userProfileState.value as? UiState.Success)?.data
+            val displayName = profile?.displayName?.ifBlank { "Aspirant" } ?: "Aspirant"
+            val examGoal = profile?.board?.ifBlank { "SSC" } ?: "SSC"
+            repository.submitLeaderboardScore(
+                assessmentId = assessment.id,
+                displayName = displayName,
+                examGoal = examGoal,
+                scoreMarks = obtainedMarks,
+                maxMarks = maxMarks.coerceAtLeast(1),
+                scorePercent = scorePercent,
+                correctCount = correctCount,
+                incorrectCount = incorrectCount,
+                durationSeconds = durationSeconds
             )
             if (res.isFailure) {
                 _statusBanner.value = "Result saved locally; cloud sync pending"
@@ -559,6 +598,45 @@ class MainViewModel(
                 _statusBanner.value = res.exceptionOrNull()?.localizedMessage
                     ?: "Requires Admin or Co-Admin permission."
             }
+        }
+    }
+
+    fun publishFullAssessment(
+        title: String,
+        subject: String,
+        classLevel: String,
+        mode: String,
+        category: String,
+        durationMinutes: Int,
+        instructions: String,
+        questions: List<QuestionItem>,
+        onComplete: () -> Unit
+    ) {
+        viewModelScope.launch {
+            val res = repository.publishFullAssessment(
+                title = title,
+                subject = subject,
+                classLevel = classLevel,
+                mode = mode,
+                category = category,
+                durationMinutes = durationMinutes,
+                instructions = instructions,
+                questions = questions
+            )
+            if (res.isSuccess) {
+                _statusBanner.value = "${if (mode == "EXAM") "All-India Mock Test" else "Daily Quiz"} (${questions.size} Qs) published live!"
+                onComplete()
+            } else {
+                _statusBanner.value = res.exceptionOrNull()?.localizedMessage
+                    ?: "Could not publish test. Check Admin permission."
+            }
+        }
+    }
+
+    fun deleteAssessment(assessmentId: String) {
+        viewModelScope.launch {
+            val res = repository.deleteAssessment(assessmentId)
+            _statusBanner.value = if (res.isSuccess) "Test removed from catalog" else "Could not delete test"
         }
     }
 

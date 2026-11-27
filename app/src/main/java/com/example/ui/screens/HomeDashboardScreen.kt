@@ -81,6 +81,9 @@ import com.example.ui.components.MetricPillCard
 import com.example.ui.components.SectionHeader
 import com.example.ui.components.TextbookCoverCard
 import com.example.ui.components.WeeklyActivityChart
+import com.example.ui.i18n.LanguagePillChip
+import com.example.ui.i18n.LocalAppLanguage
+import com.example.ui.i18n.LocalAppStrings
 import com.example.ui.theme.AmberAccent
 import com.example.ui.theme.EmeraldSecondary
 import com.example.ui.theme.ErrorRed
@@ -100,6 +103,7 @@ fun HomeDashboardScreen(
     quizAttempts: List<QuizAttempt>,
     announcements: List<Announcement>,
     isDarkMode: Boolean,
+    onOpenLanguagePicker: () -> Unit,
     onToggleDarkMode: () -> Unit,
     onSecretAdminTrigger: () -> Unit,
     onOpenNotifications: () -> Unit,
@@ -111,6 +115,8 @@ fun HomeDashboardScreen(
     onOpenNotesAndVideos: (initialTab: Int) -> Unit,
     onOpenPlannerAndProgress: () -> Unit
 ) {
+    val strings = LocalAppStrings.current
+    val currentLanguage = LocalAppLanguage.current
     val context = LocalContext.current
     var adminTapCount by remember { mutableIntStateOf(0) }
     var lastTapTimeMs by remember { mutableLongStateOf(0L) }
@@ -186,7 +192,7 @@ fun HomeDashboardScreen(
                     }
                     Column {
                         Text(
-                            text = "Textbook • Hi, $studentName",
+                            text = "${strings.hiGreeting}, $studentName",
                             style = MaterialTheme.typography.titleLarge,
                             fontWeight = FontWeight.Bold,
                             color = MaterialTheme.colorScheme.onBackground,
@@ -235,7 +241,14 @@ fun HomeDashboardScreen(
                     }
                 }
 
-                Row(verticalAlignment = Alignment.CenterVertically) {
+                Row(
+                    verticalAlignment = Alignment.CenterVertically,
+                    horizontalArrangement = Arrangement.spacedBy(2.dp)
+                ) {
+                    LanguagePillChip(
+                        currentLanguage = currentLanguage,
+                        onClick = onOpenLanguagePicker
+                    )
                     IconButton(
                         onClick = onToggleDarkMode,
                         modifier = Modifier.testTag("toggle_theme_button")
@@ -307,7 +320,7 @@ fun HomeDashboardScreen(
                                     color = if (featuredLiveClass.isLiveNow) ErrorRed else AmberAccent
                                 ) {
                                     Text(
-                                        text = if (featuredLiveClass.isLiveNow) "● LIVE ON ZOOM" else "UPCOMING ZOOM",
+                                        text = if (featuredLiveClass.isLiveNow) strings.liveOnZoom else strings.upcomingZoom,
                                         style = MaterialTheme.typography.labelSmall,
                                         color = Color.White,
                                         fontWeight = FontWeight.Bold,
@@ -349,7 +362,7 @@ fun HomeDashboardScreen(
                             ),
                             contentPadding = PaddingValues(horizontal = 12.dp, vertical = 8.dp)
                         ) {
-                            Text("Join", style = MaterialTheme.typography.labelLarge)
+                            Text(strings.join, style = MaterialTheme.typography.labelLarge)
                         }
                     }
                 }
@@ -386,7 +399,7 @@ fun HomeDashboardScreen(
                                 color = EmeraldSecondary.copy(alpha = 0.22f)
                             ) {
                                 Text(
-                                    text = "CONTINUE LEARNING",
+                                    text = strings.continueLearning,
                                     style = MaterialTheme.typography.labelSmall,
                                     fontWeight = FontWeight.Bold,
                                     color = EmeraldSecondary,
@@ -394,7 +407,7 @@ fun HomeDashboardScreen(
                                 )
                             }
                             Text(
-                                text = "${continueProgress?.progressPercent ?: 0}% Complete",
+                                text = "${continueProgress?.progressPercent ?: 0}% ${strings.completeSuffix}",
                                 style = MaterialTheme.typography.labelMedium,
                                 color = Color.White.copy(alpha = 0.85f)
                             )
@@ -452,7 +465,7 @@ fun HomeDashboardScreen(
                             )
                             Spacer(modifier = Modifier.width(8.dp))
                             Text(
-                                text = if (continueProgress != null) "Continue Reading" else "Start Reading",
+                                text = if (continueProgress != null) strings.continueReading else strings.startReading,
                                 style = MaterialTheme.typography.labelLarge
                             )
                             Spacer(modifier = Modifier.width(6.dp))
@@ -470,8 +483,8 @@ fun HomeDashboardScreen(
         // 3. My Textbooks Shelf
         item {
             SectionHeader(
-                title = "My Textbooks",
-                actionLabel = "All Books",
+                title = strings.myTextbooks,
+                actionLabel = strings.allBooks,
                 onActionClick = onOpenLibrary
             )
             Spacer(modifier = Modifier.height(8.dp))
@@ -492,7 +505,7 @@ fun HomeDashboardScreen(
 
         // 4. Learning Tools 2x3 Grid
         item {
-            SectionHeader(title = "Learning Tools")
+            SectionHeader(title = strings.learningTools)
             Spacer(modifier = Modifier.height(8.dp))
             Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
                 Row(
@@ -501,8 +514,8 @@ fun HomeDashboardScreen(
                 ) {
                     LearningToolTile(
                         icon = Icons.Filled.AutoAwesome,
-                        title = "AI Teacher",
-                        subtitle = "EN & हिंदी Tutor",
+                        title = strings.aiTeacher,
+                        subtitle = strings.aiTeacherSubtitle,
                         accent = NavyPrimary,
                         onClick = onOpenAiTeacher,
                         modifier = Modifier
@@ -511,8 +524,8 @@ fun HomeDashboardScreen(
                     )
                     LearningToolTile(
                         icon = Icons.Filled.Quiz,
-                        title = "Daily Quiz",
-                        subtitle = "MCQ & Review",
+                        title = strings.dailyQuiz,
+                        subtitle = strings.dailyQuizSubtitle,
                         accent = EmeraldSecondary,
                         onClick = onOpenPractice,
                         modifier = Modifier
@@ -526,7 +539,7 @@ fun HomeDashboardScreen(
                 ) {
                     LearningToolTile(
                         icon = Icons.Filled.Videocam,
-                        title = "Live Classes",
+                        title = strings.liveClasses,
                         subtitle = if (liveClasses.isNotEmpty()) "${liveClasses.size} Zoom Live" else "Zoom Sessions",
                         accent = ErrorRed,
                         onClick = { onOpenNotesAndVideos(0) },
@@ -536,8 +549,8 @@ fun HomeDashboardScreen(
                     )
                     LearningToolTile(
                         icon = Icons.Filled.PlayCircle,
-                        title = "Video Lectures",
-                        subtitle = "HD Concept Videos",
+                        title = strings.videoLectures,
+                        subtitle = strings.videoLecturesSubtitle,
                         accent = SubjectHindiColor,
                         onClick = { onOpenNotesAndVideos(1) },
                         modifier = Modifier
@@ -551,8 +564,8 @@ fun HomeDashboardScreen(
                 ) {
                     LearningToolTile(
                         icon = Icons.Filled.Description,
-                        title = "Notes & PYQs",
-                        subtitle = "Formulas & Papers",
+                        title = strings.notesAndPyqs,
+                        subtitle = strings.notesAndPyqsSubtitle,
                         accent = SubjectEnglishColor,
                         onClick = { onOpenNotesAndVideos(2) },
                         modifier = Modifier
@@ -561,8 +574,8 @@ fun HomeDashboardScreen(
                     )
                     LearningToolTile(
                         icon = Icons.Filled.CalendarMonth,
-                        title = "Study Planner",
-                        subtitle = "Goals & Reports",
+                        title = strings.studyPlanner,
+                        subtitle = strings.studyPlannerSubtitle,
                         accent = SubjectScienceColor,
                         onClick = onOpenPlannerAndProgress,
                         modifier = Modifier
@@ -576,8 +589,8 @@ fun HomeDashboardScreen(
         // 5. Performance Snapshot & Weekly Activity
         item {
             SectionHeader(
-                title = "Your Performance",
-                actionLabel = "Full Report",
+                title = strings.yourPerformance,
+                actionLabel = strings.fullReport,
                 onActionClick = onOpenPlannerAndProgress
             )
             Spacer(modifier = Modifier.height(8.dp))
@@ -587,14 +600,14 @@ fun HomeDashboardScreen(
             ) {
                 MetricPillCard(
                     icon = Icons.Filled.Schedule,
-                    label = "Study Time",
+                    label = strings.studyTime,
                     value = studyHoursLabel,
                     accent = NavyPrimary,
                     modifier = Modifier.weight(1f)
                 )
                 MetricPillCard(
                     icon = Icons.Filled.TrendingUp,
-                    label = "Avg Quiz",
+                    label = strings.avgQuiz,
                     value = if (quizAttempts.isEmpty()) "—" else "$avgQuizScore%",
                     accent = EmeraldSecondary,
                     modifier = Modifier.weight(1f)
@@ -619,7 +632,7 @@ fun HomeDashboardScreen(
                     ) {
                         Column {
                             Text(
-                                text = "Weekly Study Activity",
+                                text = strings.weeklyActivity,
                                 style = MaterialTheme.typography.titleMedium,
                                 color = MaterialTheme.colorScheme.onSurface
                             )

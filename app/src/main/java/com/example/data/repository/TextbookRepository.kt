@@ -12,6 +12,7 @@ import com.example.data.model.Chapter
 import com.example.data.model.CoAdminAccount
 import com.example.data.model.CoAdminSession
 import com.example.data.model.CurriculumCatalog
+import com.example.data.model.LeaderboardEntry
 import com.example.data.model.LiveClass
 import com.example.data.model.PersonalNote
 import com.example.data.model.QuestionItem
@@ -102,11 +103,11 @@ class TextbookRepository(
                     "userId" to uid,
                     "displayName" to safeName,
                     "email" to email?.take(120),
-                    "board" to "CBSE",
-                    "classLevel" to "Class 10",
-                    "medium" to "English",
+                    "board" to "SSC",
+                    "classLevel" to "SSC CGL / CHSL",
+                    "medium" to "Bilingual",
                     "academicSession" to "2026-27",
-                    "subjects" to listOf("Mathematics", "Science", "English", "Hindi", "Social Science"),
+                    "subjects" to listOf("Quantitative Aptitude", "Logical Reasoning", "General Studies & GK", "English Comprehension", "Current Affairs"),
                     "onboardingDone" to false,
                     "planTier" to "FREE",
                     "studyMinutesTotal" to 0L,
@@ -502,6 +503,68 @@ class TextbookRepository(
         }
     }
 
+    fun observeTestLeaderboard(userId: String, assessmentId: String): Flow<List<LeaderboardEntry>> = flow {
+        val safeId = assessmentId.replace(Regex("[^a-zA-Z0-9_\\-]"), "_").take(128)
+        val path = "assessments/$safeId/leaderboard"
+        emitAll(
+            db.collection("assessments").document(safeId).collection("leaderboard")
+                .snapshots()
+                .map { snap ->
+                    snap.toObjects(LeaderboardEntry::class.java, DocumentSnapshot.ServerTimestampBehavior.ESTIMATE)
+                        .sortedWith(
+                            compareByDescending<LeaderboardEntry> { it.scorePercent }
+                                .thenByDescending { it.scoreMarks }
+                                .thenBy { it.durationSeconds }
+                                .thenBy { it.updatedAt?.seconds ?: Long.MAX_VALUE }
+                        )
+                }
+                .logFirestoreErrors(userId, OperationType.LIST, path)
+        )
+    }
+
+    suspend fun submitLeaderboardScore(
+        assessmentId: String,
+        displayName: String,
+        examGoal: String,
+        scoreMarks: Int,
+        maxMarks: Int,
+        scorePercent: Int,
+        correctCount: Int,
+        incorrectCount: Int,
+        durationSeconds: Int
+    ): Result<Unit> {
+        var path = "assessments/$assessmentId/leaderboard"
+        return try {
+            val uid = requireUserId()
+            val safeAssessmentId = assessmentId.replace(Regex("[^a-zA-Z0-9_\\-]"), "_").take(128)
+            path = "assessments/$safeAssessmentId/leaderboard/$uid"
+            val safeMax = maxMarks.coerceIn(1, 1000)
+            val safeScore = scoreMarks.coerceIn(0, safeMax)
+            val payload = mapOf(
+                "userId" to uid,
+                "assessmentId" to safeAssessmentId,
+                "displayName" to displayName.trim().ifBlank { "Aspirant" }.take(80),
+                "examGoal" to examGoal.trim().ifBlank { "SSC" }.take(40),
+                "scoreMarks" to safeScore.toLong(),
+                "maxMarks" to safeMax.toLong(),
+                "scorePercent" to scorePercent.coerceIn(0, 100).toLong(),
+                "correctCount" to correctCount.coerceIn(0, 200).toLong(),
+                "incorrectCount" to incorrectCount.coerceIn(0, 200).toLong(),
+                "durationSeconds" to durationSeconds.coerceIn(0, 14400).toLong(),
+                "updatedAt" to FieldValue.serverTimestamp()
+            )
+            db.collection("assessments").document(safeAssessmentId)
+                .collection("leaderboard").document(uid)
+                .set(payload).await()
+            Result.success(Unit)
+        } catch (e: CancellationException) {
+            throw e
+        } catch (e: Exception) {
+            handleFirestoreError(e, OperationType.WRITE, path)
+            Result.failure(e)
+        }
+    }
+
     // --- 5. AI Chat History ---
 
     fun observeAiMessages(userId: String): Flow<List<AiChatMessage>> = flow {
@@ -680,6 +743,7 @@ class TextbookRepository(
                         }
                     }
                     mergeById(CurriculumCatalog.starterAssessments, cloud)
+                        .sortedByDescending { it.createdAt?.seconds ?: 0L }
                 }
                 .logFirestoreErrors(userId, OperationType.LIST, path)
         )
@@ -1157,6 +1221,83 @@ class TextbookRepository(
             throw e
         } catch (e: Exception) {
             handleFirestoreError(e, OperationType.CREATE, path)
+            Result.failure(e)
+        }
+    }
+
+    suspend fun publishFullAssessment(
+        title: String,
+        subject: String,
+        classLevel: String,
+        mode: String,
+        category: String,
+        durationMinutes: Int,
+        instructions: String,
+        questions: List<QuestionItem>
+    ): Result<Unit> {
+        var path = "assessments"
+        return try {
+            val uid = requireUserId()
+            require(questions.isNotEmpty()) { "Add at least 1 question before publishing." }
+            val docId = "assess_${UUID.randomUUID().toString().replace("-", "").take(10)}"
+            path = "assessments/$docId"
+
+            val sanitizedQuestions = questions.take(50).map { q ->
+                val cleanOpts = q.options.map { it.trim() }.filter { it.isNotEmpty() }.take(4)
+                val safeCorrect = q.correctIndex.toInt().coerceIn(0, (cleanOpts.size - 1).coerceAtLeast(0))
+                val safeMarks = q.marks.coerceIn(1L, 10L)
+                mapOf(
+                    "prompt" to q.prompt.trim().take(600),
+                    "type" to "MCQ",
+                    "options" to cleanOpts,
+                    "correctIndex" to safeCorrect.toLong(),
+                    "correctText" to "",
+                    "explanation" to q.explanation.trim().ifBlank { "Verified by Admin faculty." }.take(1200),
+                    "topic" to q.topic.trim().ifBlank { subject.take(50) }.take(60),
+                    "marks" to safeMarks
+                )
+            }
+            val totalMarks = sanitizedQuestions.sumOf { (it["marks"] as Long) }.coerceIn(1L, 500L)
+
+            db.collection("assessments").document(docId).set(
+                mapOf(
+                    "title" to title.trim().take(140),
+                    "subject" to subject.trim().take(60),
+                    "classLevel" to classLevel.trim().take(30),
+                    "mode" to if (mode == "EXAM") "EXAM" else "QUIZ",
+                    "category" to category.trim().ifBlank { if (mode == "EXAM") "All-India Mock" else "Daily Speed Quiz" }.take(50),
+                    "durationMinutes" to durationMinutes.coerceIn(1, 180).toLong(),
+                    "totalMarks" to totalMarks,
+                    "instructions" to instructions.trim().ifBlank {
+                        "Attempt all questions before timer expires. Automatic Live Rank & detailed Admin Answer Explanations will unlock immediately after submission."
+                    }.take(800),
+                    "questions" to sanitizedQuestions,
+                    "premiumOnly" to false,
+                    "published" to true,
+                    "createdBy" to uid,
+                    "createdAt" to FieldValue.serverTimestamp(),
+                    "updatedAt" to FieldValue.serverTimestamp()
+                )
+            ).await()
+            Result.success(Unit)
+        } catch (e: CancellationException) {
+            throw e
+        } catch (e: Exception) {
+            handleFirestoreError(e, OperationType.CREATE, path)
+            Result.failure(e)
+        }
+    }
+
+    suspend fun deleteAssessment(assessmentId: String): Result<Unit> {
+        val path = "assessments/$assessmentId"
+        return try {
+            requireUserId()
+            db.collection("assessments").document(assessmentId).delete().await()
+            Result.success(Unit)
+        } catch (e: CancellationException) {
+            throw e
+        } catch (e: Exception) {
+            handleFirestoreError(e, OperationType.DELETE, path)
             Result.failure(e)
         }
     }

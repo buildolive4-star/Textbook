@@ -72,6 +72,10 @@ import com.example.data.model.CurriculumCatalog
 import com.example.data.model.UiState
 import com.example.data.repository.AiTeacherRepository
 import com.example.data.repository.TextbookRepository
+import com.example.ui.i18n.AppLanguage
+import com.example.ui.i18n.LanguagePickerSheet
+import com.example.ui.i18n.LocalAppLanguage
+import com.example.ui.i18n.LocalAppStrings
 import com.example.ui.screens.AdminPanelScreen
 import com.example.ui.screens.AiTeacherScreen
 import com.example.ui.screens.CoAdminLoginDialog
@@ -119,20 +123,24 @@ private data class NavDestination(
     val testTag: String
 )
 
-private val topLevelDestinations = listOf(
-    NavDestination(Routes.HOME, "Home", Icons.Filled.Home, "nav_home"),
-    NavDestination(Routes.LIBRARY, "Books", Icons.AutoMirrored.Filled.MenuBook, "nav_library"),
-    NavDestination(Routes.AI_TEACHER, "AI Tutor", Icons.Filled.AutoAwesome, "nav_ai"),
-    NavDestination(Routes.PRACTICE, "Practice", Icons.Filled.Quiz, "nav_practice"),
-    NavDestination(Routes.PROFILE, "Profile", Icons.Filled.Person, "nav_profile")
+private val topLevelRoutes = listOf(
+    Routes.HOME,
+    Routes.LIBRARY,
+    Routes.AI_TEACHER,
+    Routes.PRACTICE,
+    Routes.PROFILE
 )
 
 @Composable
 fun TextbookApp(
     isDarkMode: Boolean,
+    currentLanguage: AppLanguage,
+    onSelectLanguage: (AppLanguage) -> Unit,
     onToggleDarkMode: () -> Unit
 ) {
+    val strings = LocalAppStrings.current
     var currentUser by remember { mutableStateOf(Firebase.auth.currentUser) }
+    var showLanguagePicker by remember { mutableStateOf(false) }
 
     DisposableEffect(Unit) {
         val listener = FirebaseAuth.AuthStateListener { auth ->
@@ -145,6 +153,7 @@ fun TextbookApp(
     val user = currentUser
     if (user == null) {
         SplashAndAuthScreen(
+            onOpenLanguagePicker = { showLanguagePicker = true },
             onAuthSuccess = {
                 currentUser = Firebase.auth.currentUser
             }
@@ -157,9 +166,21 @@ fun TextbookApp(
                 displayName = user.displayName ?: "Student",
                 email = user.email,
                 isDarkMode = isDarkMode,
+                currentLanguage = currentLanguage,
+                onOpenLanguagePicker = { showLanguagePicker = true },
                 onToggleDarkMode = onToggleDarkMode
             )
         }
+    }
+
+    if (showLanguagePicker) {
+        LanguagePickerSheet(
+            currentLanguage = currentLanguage,
+            title = strings.chooseLanguageTitle,
+            subtitle = strings.chooseLanguageSubtitle,
+            onSelectLanguage = onSelectLanguage,
+            onDismiss = { showLanguagePicker = false }
+        )
     }
 }
 
@@ -170,8 +191,11 @@ private fun AuthenticatedTextbookShell(
     displayName: String,
     email: String?,
     isDarkMode: Boolean,
+    currentLanguage: AppLanguage,
+    onOpenLanguagePicker: () -> Unit,
     onToggleDarkMode: () -> Unit
 ) {
+    val strings = LocalAppStrings.current
     val context = LocalContext.current
     val scope = rememberCoroutineScope()
     val credentialManager = remember(context) { CredentialManager.create(context) }
@@ -231,6 +255,11 @@ private fun AuthenticatedTextbookShell(
     var showNotificationsSheet by remember { mutableStateOf(false) }
     var showCoAdminLoginDialog by remember { mutableStateOf(false) }
 
+    // Keep AI Teacher language synced when user changes app language
+    LaunchedEffect(currentLanguage.englishName) {
+        aiViewModel.setLanguage(currentLanguage.englishName)
+    }
+
     LaunchedEffect(statusBanner) {
         if (!statusBanner.isNullOrBlank()) {
             snackbarHostState.showSnackbar(statusBanner!!)
@@ -256,6 +285,7 @@ private fun AuthenticatedTextbookShell(
         OnboardingScreen(
             existingProfile = profile,
             isEditingFromProfile = false,
+            onOpenLanguagePicker = onOpenLanguagePicker,
             onSave = { name, board, cls, med, session, subjects ->
                 mainViewModel.saveAcademicPreferences(name, board, cls, med, session, subjects)
             }
@@ -263,10 +293,20 @@ private fun AuthenticatedTextbookShell(
         return
     }
 
+    val topLevelDestinations = remember(strings) {
+        listOf(
+            NavDestination(Routes.HOME, strings.navHome, Icons.Filled.Home, "nav_home"),
+            NavDestination(Routes.LIBRARY, strings.navBooks, Icons.AutoMirrored.Filled.MenuBook, "nav_library"),
+            NavDestination(Routes.AI_TEACHER, strings.navAiTutor, Icons.Filled.AutoAwesome, "nav_ai"),
+            NavDestination(Routes.PRACTICE, strings.navPractice, Icons.Filled.Quiz, "nav_practice"),
+            NavDestination(Routes.PROFILE, strings.navProfile, Icons.Filled.Person, "nav_profile")
+        )
+    }
+
     val navController = rememberNavController()
     val backStackEntry by navController.currentBackStackEntryAsState()
     val currentRoute = backStackEntry?.destination?.route
-    val showChrome = currentRoute in topLevelDestinations.map { it.route }
+    val showChrome = currentRoute in topLevelRoutes
 
     val navigateTopLevel: (String) -> Unit = { route ->
         navController.navigate(route) {
@@ -335,6 +375,7 @@ private fun AuthenticatedTextbookShell(
                             quizAttempts = quizAttempts,
                             announcements = announcements,
                             isDarkMode = isDarkMode,
+                            onOpenLanguagePicker = onOpenLanguagePicker,
                             onToggleDarkMode = onToggleDarkMode,
                             onSecretAdminTrigger = {
                                 if (hasAdminAccess) {
@@ -376,7 +417,8 @@ private fun AuthenticatedTextbookShell(
                     composable(Routes.AI_TEACHER) {
                         AiTeacherScreen(
                             viewModel = aiViewModel,
-                            profile = profile
+                            profile = profile,
+                            onOpenLanguagePicker = onOpenLanguagePicker
                         )
                     }
 
@@ -400,6 +442,7 @@ private fun AuthenticatedTextbookShell(
                             isDarkMode = isDarkMode,
                             hasAdminAccess = hasAdminAccess,
                             isMainAdmin = mainViewModel.isMainAdmin,
+                            onOpenLanguagePicker = onOpenLanguagePicker,
                             onOpenAdminPanel = {
                                 navController.navigate(Routes.ADMIN_PANEL) {
                                     launchSingleTop = true
@@ -583,6 +626,7 @@ private fun AuthenticatedTextbookShell(
                         OnboardingScreen(
                             existingProfile = profile,
                             isEditingFromProfile = true,
+                            onOpenLanguagePicker = onOpenLanguagePicker,
                             onSave = { name, board, cls, med, session, subjects ->
                                 mainViewModel.saveAcademicPreferences(name, board, cls, med, session, subjects) {
                                     navController.popBackStack()
@@ -629,7 +673,7 @@ private fun AuthenticatedTextbookShell(
                     horizontalArrangement = Arrangement.spacedBy(8.dp)
                 ) {
                     Icon(Icons.Filled.Notifications, contentDescription = null, tint = AmberAccent)
-                    Text("Notifications & Announcements", style = MaterialTheme.typography.titleLarge)
+                    Text(strings.notificationsTitle, style = MaterialTheme.typography.titleLarge)
                 }
                 announcements.forEach { ann ->
                     Card(

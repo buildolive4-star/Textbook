@@ -81,6 +81,7 @@ import com.example.data.firebase.CoAdminSecurity
 import com.example.data.model.LiveClass
 import com.example.data.model.SavedMaterial
 import com.example.data.model.StudyMaterial
+import com.example.ui.i18n.LocalAppStrings
 import com.example.ui.theme.AmberAccent
 import com.example.ui.theme.EmeraldSecondary
 import com.example.ui.theme.ErrorRed
@@ -100,6 +101,7 @@ fun StudyMaterialAndVideosScreen(
     onToggleSave: (material: StudyMaterial) -> Unit,
     onOpenPractice: () -> Unit
 ) {
+    val strings = LocalAppStrings.current
     val context = LocalContext.current
     val clipboard = LocalClipboardManager.current
 
@@ -123,7 +125,7 @@ fun StudyMaterialAndVideosScreen(
     Scaffold(
         topBar = {
             TopAppBar(
-                title = { Text("Live Classes, Lectures & Notes") },
+                title = { Text(strings.liveLecturesNotes) },
                 navigationIcon = {
                     IconButton(onClick = onBack) {
                         Icon(Icons.AutoMirrored.Filled.ArrowBack, contentDescription = "Back")
@@ -142,19 +144,19 @@ fun StudyMaterialAndVideosScreen(
                 Tab(
                     selected = activeTab == 0,
                     onClick = { activeTab = 0 },
-                    text = { Text("Live (Zoom)") },
+                    text = { Text(strings.liveZoomTab) },
                     modifier = Modifier.testTag("tab_live_zoom")
                 )
                 Tab(
                     selected = activeTab == 1,
                     onClick = { activeTab = 1 },
-                    text = { Text("Lectures") },
+                    text = { Text(strings.lecturesTab) },
                     modifier = Modifier.testTag("tab_video_lectures")
                 )
                 Tab(
                     selected = activeTab == 2,
                     onClick = { activeTab = 2 },
-                    text = { Text("Notes & PYQs") },
+                    text = { Text(strings.notesAndPyqs) },
                     modifier = Modifier.testTag("tab_notes_pyq")
                 )
             }

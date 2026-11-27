@@ -68,6 +68,7 @@ import com.example.data.model.Textbook
 import com.example.data.model.UserProfile
 import com.example.ui.components.MetricPillCard
 import com.example.ui.components.WeeklyActivityChart
+import com.example.ui.i18n.LocalAppStrings
 import com.example.ui.theme.AmberAccent
 import com.example.ui.theme.EmeraldSecondary
 import com.example.ui.theme.NavyPrimary
@@ -86,6 +87,7 @@ fun StudyPlannerAndProgressScreen(
     onToggleTask: (taskId: String, completed: Boolean) -> Unit,
     onDeleteTask: (taskId: String) -> Unit
 ) {
+    val strings = LocalAppStrings.current
     var activeTab by remember { mutableIntStateOf(0) } // 0 = Planner, 1 = Progress Report
     var showAddDialog by remember { mutableStateOf(false) }
 
@@ -95,7 +97,7 @@ fun StudyPlannerAndProgressScreen(
     Scaffold(
         topBar = {
             TopAppBar(
-                title = { Text("Study Planner & Progress") },
+                title = { Text("${strings.studyPlanner} & ${strings.progressReport}") },
                 navigationIcon = {
                     IconButton(onClick = onBack) {
                         Icon(Icons.AutoMirrored.Filled.ArrowBack, contentDescription = "Back")
@@ -126,12 +128,12 @@ fun StudyPlannerAndProgressScreen(
                 Tab(
                     selected = activeTab == 0,
                     onClick = { activeTab = 0 },
-                    text = { Text("Study Planner") }
+                    text = { Text(strings.studyPlanner) }
                 )
                 Tab(
                     selected = activeTab == 1,
                     onClick = { activeTab = 1 },
-                    text = { Text("Progress Report") }
+                    text = { Text(strings.progressReport) }
                 )
             }
 

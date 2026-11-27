@@ -625,3 +625,56 @@ test("Co-Admin creation, cryptographic session verification, Cloudinary lectures
   );
 });
 
+test("Multilingual support: Tamil, Telugu, Bengali, Marathi, Urdu & 10+ Indian languages allowed while invalid languages rejected", async () => {
+  const dbA = testEnv.authenticatedContext(STUDENT_A).firestore();
+  const now = pastDate(3000);
+
+  await assertSucceeds(
+    dbA.collection("users").doc(STUDENT_A).set({
+      userId: STUDENT_A,
+      displayName: "Karthik Sundaram",
+      email: "karthik@school.edu",
+      board: "State Board",
+      classLevel: "Class 10",
+      medium: "Tamil",
+      academicSession: "2026-27",
+      subjects: ["Mathematics", "Science"],
+      onboardingDone: true,
+      planTier: "FREE",
+      studyMinutesTotal: 15,
+      streakDays: 1,
+      aiQueriesToday: 0,
+      createdAt: now,
+      updatedAt: now,
+    })
+  );
+
+  for (const lang of ["Tamil", "Telugu", "Bengali", "Marathi", "Gujarati", "Kannada", "Malayalam", "Punjabi", "Odia", "Urdu", "Assamese", "Sanskrit", "Maithili"]) {
+    await assertSucceeds(
+      dbA.collection("users").doc(STUDENT_A).collection("aiMessages").doc(`msg_${lang}`).set({
+        userId: STUDENT_A,
+        sessionId: "default_session",
+        sender: "USER",
+        language: lang,
+        subject: "Science",
+        message: "Explain Ohm's Law",
+        createdAt: now,
+      })
+    );
+  }
+
+  // Invalid language string must still be rejected
+  await assertFails(
+    dbA.collection("users").doc(STUDENT_A).collection("aiMessages").doc("msg_invalid").set({
+      userId: STUDENT_A,
+      sessionId: "default_session",
+      sender: "USER",
+      language: "Klingon",
+      subject: "Science",
+      message: "Should fail",
+      createdAt: now,
+    })
+  );
+});
+
+

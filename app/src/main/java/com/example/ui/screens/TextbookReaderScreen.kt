@@ -81,6 +81,7 @@ import com.example.data.model.Chapter
 import com.example.data.model.PersonalNote
 import com.example.data.model.ReadingProgress
 import com.example.data.model.Textbook
+import com.example.ui.i18n.LocalAppStrings
 import com.example.ui.theme.AmberAccent
 import com.example.ui.theme.DarkBg
 import com.example.ui.theme.DarkSurface
@@ -116,6 +117,7 @@ fun TextbookReaderScreen(
     onDeleteNote: (noteId: String) -> Unit,
     onExplainParagraph: (subject: String, paragraph: String) -> Unit
 ) {
+    val strings = LocalAppStrings.current
     val initialChapterIndex = remember(chapters, initialChapterId) {
         chapters.indexOfFirst { it.id == initialChapterId }.coerceAtLeast(0)
     }
@@ -289,7 +291,7 @@ fun TextbookReaderScreen(
                             ) {
                                 Icon(Icons.AutoMirrored.Filled.FormatListBulleted, contentDescription = null, modifier = Modifier.size(16.dp))
                                 Spacer(modifier = Modifier.width(6.dp))
-                                Text("Chapters", style = MaterialTheme.typography.labelMedium)
+                                Text(strings.chapters, style = MaterialTheme.typography.labelMedium)
                             }
                             OutlinedButton(
                                 onClick = { showNotesSheet = true },
@@ -299,7 +301,7 @@ fun TextbookReaderScreen(
                             ) {
                                 Icon(Icons.Filled.EditNote, contentDescription = null, modifier = Modifier.size(16.dp))
                                 Spacer(modifier = Modifier.width(6.dp))
-                                Text("Notes (${chapterNotes.size})", style = MaterialTheme.typography.labelMedium)
+                                Text("${strings.notesLabel} (${chapterNotes.size})", style = MaterialTheme.typography.labelMedium)
                             }
                         }
 
@@ -479,7 +481,7 @@ fun TextbookReaderScreen(
                                         modifier = Modifier.size(16.dp)
                                     )
                                     Text(
-                                        text = "Explain This Paragraph with AI Teacher",
+                                        text = strings.explainWithAi,
                                         style = MaterialTheme.typography.labelMedium,
                                         fontWeight = FontWeight.SemiBold,
                                         color = if (readerTheme == ReaderThemeMode.DARK) Color.White else NavyPrimary
@@ -506,7 +508,7 @@ fun TextbookReaderScreen(
                                 verticalArrangement = Arrangement.spacedBy(8.dp)
                             ) {
                                 Text(
-                                    text = "Key Concepts & Formulas",
+                                    text = strings.keyConcepts,
                                     style = MaterialTheme.typography.titleMedium,
                                     color = EmeraldSecondary,
                                     fontWeight = FontWeight.Bold
@@ -549,7 +551,7 @@ fun TextbookReaderScreen(
                         Icon(Icons.Filled.CheckCircle, contentDescription = null)
                         Spacer(modifier = Modifier.width(8.dp))
                         Text(
-                            text = if (isChapterDone) "Chapter Completed" else "Mark Chapter as Completed",
+                            text = if (isChapterDone) strings.chapterCompleted else strings.markChapterCompleted,
                             style = MaterialTheme.typography.labelLarge
                         )
                     }
@@ -631,7 +633,7 @@ fun TextbookReaderScreen(
                     .padding(horizontal = 20.dp, vertical = 12.dp),
                 verticalArrangement = Arrangement.spacedBy(8.dp)
             ) {
-                Text("Table of Contents", style = MaterialTheme.typography.titleLarge)
+                Text(strings.tableOfContents, style = MaterialTheme.typography.titleLarge)
                 chapters.forEachIndexed { idx, ch ->
                     val active = idx == currentChapterIdx
                     Surface(

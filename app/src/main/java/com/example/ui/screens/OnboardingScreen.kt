@@ -1,9 +1,11 @@
 package com.example.ui.screens
 
+import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.ExperimentalLayoutApi
 import androidx.compose.foundation.layout.FlowRow
+import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.WindowInsets
 import androidx.compose.foundation.layout.fillMaxSize
@@ -19,7 +21,10 @@ import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Check
 import androidx.compose.material.icons.filled.School
+import androidx.compose.material.icons.filled.Translate
 import androidx.compose.material3.Button
+import androidx.compose.material3.Card
+import androidx.compose.material3.CardDefaults
 import androidx.compose.material3.FilterChip
 import androidx.compose.material3.FilterChipDefaults
 import androidx.compose.material3.Icon
@@ -36,17 +41,20 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.testTag
-import androidx.compose.ui.res.stringResource
+import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
-import com.example.R
 import com.example.data.model.CurriculumCatalog
 import com.example.data.model.UserProfile
+import com.example.ui.i18n.AppLanguages
+import com.example.ui.i18n.LocalAppLanguage
+import com.example.ui.i18n.LocalAppStrings
 
 @OptIn(ExperimentalLayoutApi::class)
 @Composable
 fun OnboardingScreen(
     existingProfile: UserProfile?,
     isEditingFromProfile: Boolean = false,
+    onOpenLanguagePicker: () -> Unit = {},
     onSave: (
         displayName: String,
         board: String,
@@ -56,6 +64,8 @@ fun OnboardingScreen(
         subjects: List<String>
     ) -> Unit
 ) {
+    val strings = LocalAppStrings.current
+    val currentLanguage = LocalAppLanguage.current
     var displayName by remember(existingProfile) {
         mutableStateOf(existingProfile?.displayName?.ifBlank { "Student" } ?: "Student")
     }
@@ -102,21 +112,70 @@ fun OnboardingScreen(
                 )
 
                 Text(
-                    text = if (isEditingFromProfile) "Academic Preferences" else stringResource(R.string.onboarding_title),
+                    text = if (isEditingFromProfile) strings.academicPreferences else strings.onboardingTitle,
                     style = MaterialTheme.typography.headlineLarge,
                     color = MaterialTheme.colorScheme.onBackground
                 )
 
                 Text(
-                    text = stringResource(R.string.onboarding_subtitle),
+                    text = strings.onboardingSubtitle,
                     style = MaterialTheme.typography.bodyMedium,
                     color = MaterialTheme.colorScheme.onSurfaceVariant
                 )
 
+                // Prominent 15-Language Picker Card
+                Card(
+                    shape = RoundedCornerShape(16.dp),
+                    colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.primaryContainer),
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .clickable(onClick = onOpenLanguagePicker)
+                        .testTag("onboarding_language_card")
+                ) {
+                    Row(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .padding(horizontal = 16.dp, vertical = 14.dp),
+                        horizontalArrangement = Arrangement.SpaceBetween,
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        Row(
+                            verticalAlignment = Alignment.CenterVertically,
+                            horizontalArrangement = Arrangement.spacedBy(12.dp),
+                            modifier = Modifier.weight(1f)
+                        ) {
+                            Icon(
+                                imageVector = Icons.Filled.Translate,
+                                contentDescription = null,
+                                tint = MaterialTheme.colorScheme.onPrimaryContainer
+                            )
+                            Column {
+                                Text(
+                                    text = strings.appLanguageLabel,
+                                    style = MaterialTheme.typography.labelMedium,
+                                    color = MaterialTheme.colorScheme.onPrimaryContainer.copy(alpha = 0.8f)
+                                )
+                                Text(
+                                    text = "${currentLanguage.nativeName} (${currentLanguage.englishName})",
+                                    style = MaterialTheme.typography.titleMedium,
+                                    fontWeight = FontWeight.Bold,
+                                    color = MaterialTheme.colorScheme.onPrimaryContainer
+                                )
+                            }
+                        }
+                        Text(
+                            text = "Change",
+                            style = MaterialTheme.typography.labelLarge,
+                            fontWeight = FontWeight.Bold,
+                            color = MaterialTheme.colorScheme.primary
+                        )
+                    }
+                }
+
                 OutlinedTextField(
                     value = displayName,
                     onValueChange = { displayName = it.take(80) },
-                    label = { Text("Student Name") },
+                    label = { Text(strings.studentName) },
                     singleLine = true,
                     shape = RoundedCornerShape(14.dp),
                     modifier = Modifier
@@ -125,7 +184,7 @@ fun OnboardingScreen(
                 )
 
                 // Board Selector
-                PreferenceSectionLabel("Education Board")
+                PreferenceSectionLabel(strings.educationBoard)
                 FlowRow(
                     horizontalArrangement = Arrangement.spacedBy(8.dp),
                     verticalArrangement = Arrangement.spacedBy(8.dp)
@@ -149,7 +208,7 @@ fun OnboardingScreen(
                 }
 
                 // Class Selector
-                PreferenceSectionLabel("Select Your Class")
+                PreferenceSectionLabel(strings.selectYourClass)
                 FlowRow(
                     horizontalArrangement = Arrangement.spacedBy(8.dp),
                     verticalArrangement = Arrangement.spacedBy(8.dp)
@@ -168,18 +227,21 @@ fun OnboardingScreen(
                     }
                 }
 
-                // Medium Selector
-                PreferenceSectionLabel("Preferred Medium")
+                // Medium Selector (All 15 Indian Languages + Bilingual)
+                PreferenceSectionLabel(strings.preferredMedium)
                 FlowRow(
                     horizontalArrangement = Arrangement.spacedBy(8.dp),
                     verticalArrangement = Arrangement.spacedBy(8.dp)
                 ) {
                     CurriculumCatalog.mediums.forEach { med ->
                         val selected = selectedMedium == med
+                        val displayLabel = AppLanguages.all.firstOrNull { it.englishName == med }
+                            ?.let { if (it.code == "en") "English" else "${it.nativeName} (${it.englishName})" }
+                            ?: med
                         FilterChip(
                             selected = selected,
                             onClick = { selectedMedium = med },
-                            label = { Text(med) },
+                            label = { Text(displayLabel) },
                             colors = FilterChipDefaults.filterChipColors(
                                 selectedContainerColor = MaterialTheme.colorScheme.secondary,
                                 selectedLabelColor = MaterialTheme.colorScheme.onSecondary
@@ -189,7 +251,7 @@ fun OnboardingScreen(
                 }
 
                 // Subjects Multi-Select
-                PreferenceSectionLabel("Your Subjects")
+                PreferenceSectionLabel(strings.yourSubjects)
                 FlowRow(
                     horizontalArrangement = Arrangement.spacedBy(8.dp),
                     verticalArrangement = Arrangement.spacedBy(8.dp)
@@ -216,7 +278,7 @@ fun OnboardingScreen(
                 OutlinedTextField(
                     value = academicSession,
                     onValueChange = { academicSession = it.take(16) },
-                    label = { Text("Academic Session (e.g. 2026-27)") },
+                    label = { Text(strings.academicSession) },
                     singleLine = true,
                     shape = RoundedCornerShape(14.dp),
                     modifier = Modifier.fillMaxWidth()
@@ -242,7 +304,7 @@ fun OnboardingScreen(
                     shape = RoundedCornerShape(16.dp)
                 ) {
                     Text(
-                        text = if (isEditingFromProfile) "Save Preferences" else "Start Learning",
+                        text = if (isEditingFromProfile) strings.savePreferences else strings.startLearning,
                         style = MaterialTheme.typography.labelLarge
                     )
                 }

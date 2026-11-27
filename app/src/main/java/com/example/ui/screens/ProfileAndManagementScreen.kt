@@ -35,6 +35,7 @@ import androidx.compose.material.icons.filled.Delete
 import androidx.compose.material.icons.filled.EditNote
 import androidx.compose.material.icons.filled.Notifications
 import androidx.compose.material.icons.filled.School
+import androidx.compose.material.icons.filled.Translate
 import androidx.compose.material.icons.filled.WorkspacePremium
 import androidx.compose.material3.Button
 import androidx.compose.material3.ButtonDefaults
@@ -72,6 +73,8 @@ import com.example.data.model.CurriculumCatalog
 import com.example.data.model.PersonalNote
 import com.example.data.model.SavedMaterial
 import com.example.data.model.UserProfile
+import com.example.ui.i18n.LocalAppLanguage
+import com.example.ui.i18n.LocalAppStrings
 import com.example.ui.theme.AmberAccent
 import com.example.ui.theme.EmeraldSecondary
 import com.example.ui.theme.ErrorRed
@@ -88,6 +91,7 @@ fun ProfileAndManagementScreen(
     isDarkMode: Boolean,
     hasAdminAccess: Boolean,
     isMainAdmin: Boolean,
+    onOpenLanguagePicker: () -> Unit,
     onOpenAdminPanel: () -> Unit,
     onToggleDarkMode: () -> Unit,
     onEditPreferences: () -> Unit,
@@ -97,6 +101,8 @@ fun ProfileAndManagementScreen(
     onDeleteNote: (noteId: String) -> Unit,
     onSignOut: () -> Unit
 ) {
+    val strings = LocalAppStrings.current
+    val currentLanguage = LocalAppLanguage.current
     var subPage by remember { mutableStateOf(ProfileSubPage.MAIN) }
 
     BackHandler(enabled = subPage != ProfileSubPage.MAIN) {
@@ -196,8 +202,16 @@ fun ProfileAndManagementScreen(
                     ) {
                         Column(modifier = Modifier.fillMaxWidth()) {
                             ProfileRowItem(
+                                icon = Icons.Filled.Translate,
+                                title = strings.appLanguageLabel,
+                                subtitle = "${currentLanguage.nativeName} • ${currentLanguage.englishName}",
+                                accent = EmeraldSecondary,
+                                onClick = onOpenLanguagePicker
+                            )
+                            HorizontalDivider(modifier = Modifier.padding(horizontal = 16.dp))
+                            ProfileRowItem(
                                 icon = Icons.Filled.School,
-                                title = "Academic Preferences",
+                                title = strings.academicPreferences,
                                 subtitle = "${profile?.board ?: "CBSE"} • ${profile?.classLevel ?: "Class 10"} • ${profile?.medium ?: "English"}",
                                 accent = NavyPrimary,
                                 onClick = onEditPreferences
@@ -205,23 +219,23 @@ fun ProfileAndManagementScreen(
                             HorizontalDivider(modifier = Modifier.padding(horizontal = 16.dp))
                             ProfileRowItem(
                                 icon = Icons.Filled.CalendarMonth,
-                                title = "Study Planner & Progress Report",
-                                subtitle = "Goals, weekly activity & weak-topic insights",
+                                title = "${strings.studyPlanner} & ${strings.progressReport}",
+                                subtitle = strings.studyPlannerSubtitle,
                                 accent = EmeraldSecondary,
                                 onClick = onOpenPlannerAndProgress
                             )
                             HorizontalDivider(modifier = Modifier.padding(horizontal = 16.dp))
                             ProfileRowItem(
                                 icon = Icons.Filled.Bookmark,
-                                title = "Saved Materials & Personal Notes",
-                                subtitle = "${savedMaterials.size} saved • ${personalNotes.size} personal notes",
+                                title = strings.savedAndNotes,
+                                subtitle = "${savedMaterials.size} saved • ${personalNotes.size} notes",
                                 accent = AmberAccent,
                                 onClick = { subPage = ProfileSubPage.SAVED_AND_NOTES }
                             )
                             HorizontalDivider(modifier = Modifier.padding(horizontal = 16.dp))
                             ProfileRowItem(
                                 icon = Icons.Filled.WorkspacePremium,
-                                title = "Subscription Plans",
+                                title = strings.subscriptionPlans,
                                 subtitle = "Monthly ₹99 • Quarterly ₹249 • Yearly ₹799",
                                 accent = Color(0xFFD97706),
                                 onClick = { subPage = ProfileSubPage.SUBSCRIPTIONS }
@@ -229,8 +243,8 @@ fun ProfileAndManagementScreen(
                             HorizontalDivider(modifier = Modifier.padding(horizontal = 16.dp))
                             ProfileRowItem(
                                 icon = Icons.Filled.Notifications,
-                                title = "Announcements & Exam Alerts",
-                                subtitle = "View latest board & teacher notifications",
+                                title = strings.announcements,
+                                subtitle = strings.notificationsTitle,
                                 accent = Color(0xFF4F46E5),
                                 onClick = onOpenNotifications
                             )
@@ -272,8 +286,8 @@ fun ProfileAndManagementScreen(
                             Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(12.dp)) {
                                 Icon(Icons.Filled.DarkMode, contentDescription = null, tint = MaterialTheme.colorScheme.primary)
                                 Column {
-                                    Text("Dark Reading Theme", style = MaterialTheme.typography.titleSmall)
-                                    Text("Comfortable night-time study mode", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                                    Text(strings.darkTheme, style = MaterialTheme.typography.titleSmall)
+                                    Text(strings.darkThemeSubtitle, style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
                                 }
                             }
                             Switch(checked = isDarkMode, onCheckedChange = { onToggleDarkMode() })
@@ -294,7 +308,7 @@ fun ProfileAndManagementScreen(
                     ) {
                         Icon(Icons.AutoMirrored.Filled.ExitToApp, contentDescription = null)
                         Spacer(modifier = Modifier.width(8.dp))
-                        Text("Sign Out", style = MaterialTheme.typography.labelLarge)
+                        Text(strings.signOut, style = MaterialTheme.typography.labelLarge)
                     }
                 }
             }

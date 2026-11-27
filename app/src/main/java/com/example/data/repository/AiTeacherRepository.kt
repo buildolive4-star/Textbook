@@ -28,7 +28,8 @@ class AiTeacherRepository {
                     - For Science and Social Science, include a relatable everyday example when helpful.
                     - When a textbook paragraph is provided, ground your explanation strictly in that paragraph and clearly note if something goes beyond the given excerpt.
                     - If an answer is uncertain or depends on a specific board edition, say so honestly instead of guessing.
-                    - Respond strictly in the requested language (English or clear, simple Hindi in Devanagari script when Hindi is requested).
+                    - Respond strictly in the requested language (English, Hindi, Tamil, Telugu, Bengali, Marathi, Gujarati, Kannada, Malayalam, Punjabi, Odia, Urdu, Assamese, Sanskrit, or Maithili) using its authentic native script and clear, school-friendly wording.
+                    - When explaining formulas or technical terms in an Indian regional language, keep standard mathematical symbols and optionally include the common English exam term in parentheses so board students can score well.
                     """.trimIndent()
                 )
             }

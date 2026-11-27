@@ -64,6 +64,18 @@ service cloud.firestore {
       return val is list && val.size() <= maxLen && (val.size() == 0 || val[0] is string);
     }
 
+    function isValidAppLanguage(val) {
+      return val is string && val in [
+        'English', 'Hindi', 'Tamil', 'Telugu', 'Bengali', 'Marathi',
+        'Gujarati', 'Kannada', 'Malayalam', 'Punjabi', 'Odia',
+        'Urdu', 'Assamese', 'Sanskrit', 'Maithili'
+      ];
+    }
+
+    function isValidMedium(val) {
+      return isValidAppLanguage(val) || val == 'Bilingual';
+    }
+
     // --- Validation Blueprints (Anti-Update-Gap) ---
 
     function isValidUserProfile(data) {
@@ -72,7 +84,7 @@ service cloud.firestore {
         (!('email' in data) || data.email == null || (data.email is string && data.email.size() <= 120)) &&
         data.board is string && data.board in ['CBSE', 'ICSE', 'State Board', 'Other'] &&
         data.classLevel is string && data.classLevel.size() >= 2 && data.classLevel.size() <= 30 &&
-        data.medium is string && data.medium in ['English', 'Hindi', 'Bilingual'] &&
+        data.medium is string && isValidMedium(data.medium) &&
         data.academicSession is string && data.academicSession.size() >= 4 && data.academicSession.size() <= 20 &&
         isStringList(data.subjects, 12) &&
         data.onboardingDone is bool &&
@@ -146,7 +158,7 @@ service cloud.firestore {
       return data.userId is string && data.userId.size() >= 1 && data.userId.size() <= 128 &&
         data.sessionId is string && data.sessionId.size() >= 1 && data.sessionId.size() <= 64 &&
         data.sender is string && data.sender in ['USER', 'AI'] &&
-        data.language is string && data.language in ['English', 'Hindi'] &&
+        data.language is string && isValidAppLanguage(data.language) &&
         (!('subject' in data) || data.subject == null || (data.subject is string && data.subject.size() <= 60)) &&
         data.message is string && data.message.size() >= 1 && data.message.size() <= 8000 &&
         data.createdAt is timestamp && data.createdAt <= request.time;
@@ -167,7 +179,7 @@ service cloud.firestore {
         data.classLevel is string && data.classLevel.size() >= 2 && data.classLevel.size() <= 30 &&
         data.category is string && data.category in ['Class 1-5', 'Class 6-8', 'Class 9-10', 'Class 11-12'] &&
         data.board is string && data.board in ['CBSE', 'ICSE', 'State Board', 'Other'] &&
-        data.medium is string && data.medium in ['English', 'Hindi', 'Bilingual'] &&
+        data.medium is string && isValidMedium(data.medium) &&
         data.academicYear is string && data.academicYear.size() >= 4 && data.academicYear.size() <= 20 &&
         data.description is string && data.description.size() >= 1 && data.description.size() <= 800 &&
         data.chapterCount is int && data.chapterCount >= 0 && data.chapterCount <= 100 &&

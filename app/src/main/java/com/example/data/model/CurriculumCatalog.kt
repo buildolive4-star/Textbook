@@ -9,7 +9,11 @@ object CurriculumCatalog {
         "Class 9", "Class 10", "Class 11", "Class 12"
     )
     val categories = listOf("All", "Class 1-5", "Class 6-8", "Class 9-10", "Class 11-12")
-    val mediums = listOf("English", "Hindi", "Bilingual")
+    val mediums = listOf(
+        "English", "Hindi", "Tamil", "Telugu", "Bengali", "Marathi",
+        "Gujarati", "Kannada", "Malayalam", "Punjabi", "Odia",
+        "Urdu", "Assamese", "Sanskrit", "Maithili", "Bilingual"
+    )
     val allSubjects = listOf("Mathematics", "Science", "English", "Hindi", "Social Science")
 
     val subscriptionPlans: List<SubscriptionPlan> = listOf(

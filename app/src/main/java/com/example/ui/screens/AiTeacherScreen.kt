@@ -28,6 +28,7 @@ import androidx.compose.material.icons.automirrored.filled.Send
 import androidx.compose.material.icons.filled.AutoAwesome
 import androidx.compose.material.icons.filled.Close
 import androidx.compose.material.icons.filled.DeleteSweep
+import androidx.compose.material.icons.filled.Translate
 import androidx.compose.material3.Card
 import androidx.compose.material3.CardDefaults
 import androidx.compose.material3.CircularProgressIndicator
@@ -57,6 +58,10 @@ import androidx.compose.ui.unit.dp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.example.R
 import com.example.data.model.UserProfile
+import com.example.ui.i18n.AppLanguages
+import com.example.ui.i18n.LanguagePickerSheet
+import com.example.ui.i18n.LocalAppStrings
+import com.example.ui.i18n.appStringsFor
 import com.example.ui.theme.AmberAccent
 import com.example.ui.theme.EmeraldSecondary
 import com.example.ui.theme.NavyPrimary
@@ -66,36 +71,28 @@ import com.example.ui.viewmodel.AiTeacherViewModel
 @Composable
 fun AiTeacherScreen(
     viewModel: AiTeacherViewModel,
-    profile: UserProfile?
+    profile: UserProfile?,
+    onOpenLanguagePicker: () -> Unit = {}
 ) {
+    val uiStrings = LocalAppStrings.current
     val chatHistory by viewModel.chatHistory.collectAsStateWithLifecycle()
     val streamState by viewModel.streamState.collectAsStateWithLifecycle()
     val selectedLanguage by viewModel.selectedLanguage.collectAsStateWithLifecycle()
     val pendingParagraph by viewModel.pendingParagraphContext.collectAsStateWithLifecycle()
 
     var inputText by remember { mutableStateOf("") }
+    var showAiLangSheet by remember { mutableStateOf(false) }
     val listState = rememberLazyListState()
+
+    val activeLang = remember(selectedLanguage) { AppLanguages.byEnglishName(selectedLanguage) }
+    val aiStrings = remember(activeLang.code) { appStringsFor(activeLang.code) }
 
     val isPremium = (profile?.planTier ?: "FREE") != "FREE"
     val queriesToday = profile?.aiQueriesToday ?: 0L
     val studentClass = profile?.classLevel ?: "Class 10"
     val board = profile?.board ?: "CBSE"
 
-    val quickPrompts = if (selectedLanguage == "Hindi") {
-        listOf(
-            "ओम का नियम सरल उदाहरण से समझाएँ",
-            "√2 अपरिमेय है — चरणबद्ध सिद्ध करें",
-            "प्रकाश संश्लेषण का सारांश और 3 प्रश्न दें",
-            "द्विघात समीकरण हल करने का आसान तरीका"
-        )
-    } else {
-        listOf(
-            "Solve 2x² - 7x + 3 = 0 step-by-step",
-            "Explain Ohm's Law with a real-life example",
-            "Summarize Real Numbers & give 3 practice MCQs",
-            "Explain situational irony in A Letter to God"
-        )
-    }
+    val quickPrompts = aiStrings.quickPrompts
 
     LaunchedEffect(chatHistory.size, streamState) {
         val total = chatHistory.size + if (streamState is AiStreamState.Streaming || streamState is AiStreamState.Thinking) 1 else 0
@@ -141,35 +138,75 @@ fun AiTeacherScreen(
                         )
                         Column {
                             Text(
-                                text = "AI Teacher",
+                                text = uiStrings.aiTeacher,
                                 style = MaterialTheme.typography.titleLarge,
                                 color = MaterialTheme.colorScheme.onSurface
                             )
                             Text(
                                 text = "$studentClass • $board • " +
-                                    if (isPremium) "Unlimited Pro" else "Free: $queriesToday/10 today",
+                                    if (isPremium) "Unlimited Pro" else "Free: $queriesToday/10",
                                 style = MaterialTheme.typography.bodySmall,
                                 color = if (isPremium) EmeraldSecondary else MaterialTheme.colorScheme.onSurfaceVariant
                             )
                         }
                     }
 
-                    Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+                    if (chatHistory.isNotEmpty()) {
+                        IconButton(onClick = { viewModel.clearHistory() }) {
+                            Icon(Icons.Filled.DeleteSweep, contentDescription = "Clear AI Chat History")
+                        }
+                    }
+                }
+
+                // Quick 15-Language Bar (EN, हिन्दी, தமிழ் + All 15 Languages Picker)
+                LazyRow(
+                    horizontalArrangement = Arrangement.spacedBy(8.dp),
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    item {
                         FilterChip(
                             selected = selectedLanguage == "English",
                             onClick = { viewModel.setLanguage("English") },
-                            label = { Text("EN") }
+                            label = { Text("English") }
                         )
+                    }
+                    item {
                         FilterChip(
                             selected = selectedLanguage == "Hindi",
                             onClick = { viewModel.setLanguage("Hindi") },
-                            label = { Text("हिंदी") }
+                            label = { Text("हिन्दी") }
                         )
-                        if (chatHistory.isNotEmpty()) {
-                            IconButton(onClick = { viewModel.clearHistory() }) {
-                                Icon(Icons.Filled.DeleteSweep, contentDescription = "Clear AI Chat History")
-                            }
+                    }
+                    item {
+                        FilterChip(
+                            selected = selectedLanguage == "Tamil",
+                            onClick = { viewModel.setLanguage("Tamil") },
+                            label = { Text("தமிழ்") }
+                        )
+                    }
+                    if (activeLang.code !in setOf("en", "hi", "ta")) {
+                        item {
+                            FilterChip(
+                                selected = true,
+                                onClick = { showAiLangSheet = true },
+                                label = { Text("${activeLang.nativeName} (${activeLang.englishName})") }
+                            )
                         }
+                    }
+                    item {
+                        FilterChip(
+                            selected = false,
+                            onClick = { showAiLangSheet = true },
+                            leadingIcon = {
+                                Icon(
+                                    imageVector = Icons.Filled.Translate,
+                                    contentDescription = null,
+                                    modifier = Modifier.size(16.dp)
+                                )
+                            },
+                            label = { Text(uiStrings.allLanguagesLabel) },
+                            modifier = Modifier.testTag("ai_all_languages_chip")
+                        )
                     }
                 }
             }
@@ -202,13 +239,13 @@ fun AiTeacherScreen(
                             ) {
                                 Icon(Icons.Filled.AutoAwesome, contentDescription = null, tint = AmberAccent)
                                 Text(
-                                    text = "Ask Anything From Your Syllabus",
+                                    text = aiStrings.askAnythingTitle,
                                     style = MaterialTheme.typography.titleMedium,
                                     fontWeight = FontWeight.Bold
                                 )
                             }
                             Text(
-                                text = "Get step-by-step math solutions, science concepts with examples, chapter summaries, or tap 'Explain This Paragraph' inside any textbook chapter.",
+                                text = aiStrings.askAnythingSubtitle,
                                 style = MaterialTheme.typography.bodyMedium,
                                 color = MaterialTheme.colorScheme.onSurfaceVariant
                             )
@@ -232,7 +269,7 @@ fun AiTeacherScreen(
                         ) {
                             CircularProgressIndicator(modifier = Modifier.size(18.dp), strokeWidth = 2.dp)
                             Text(
-                                text = if (selectedLanguage == "Hindi") "AI Teacher उत्तर तैयार कर रहे हैं..." else "AI Teacher is preparing your explanation...",
+                                text = aiStrings.aiThinking,
                                 style = MaterialTheme.typography.bodySmall,
                                 color = MaterialTheme.colorScheme.onSurfaceVariant
                             )
@@ -320,11 +357,7 @@ fun AiTeacherScreen(
                             .testTag("explain_attached_paragraph_button")
                             .clickable {
                                 viewModel.askTeacher(
-                                    question = if (selectedLanguage == "Hindi") {
-                                        "इस अनुच्छेद को सरल भाषा और उदाहरण के साथ समझाएँ।"
-                                    } else {
-                                        "Explain this textbook paragraph in simple language with an easy example."
-                                    },
+                                    question = aiStrings.explainPromptTemplate,
                                     studentClass = studentClass,
                                     board = board,
                                     isPremium = isPremium,
@@ -333,7 +366,7 @@ fun AiTeacherScreen(
                             }
                     ) {
                         Text(
-                            text = if (selectedLanguage == "Hindi") "✨ सरल भाषा में समझाएँ" else "✨ Explain in Simple Words",
+                            text = aiStrings.explainInSimpleWords,
                             style = MaterialTheme.typography.labelMedium,
                             color = Color.White,
                             fontWeight = FontWeight.Bold,
@@ -382,10 +415,7 @@ fun AiTeacherScreen(
                     value = inputText,
                     onValueChange = { inputText = it },
                     placeholder = {
-                        Text(
-                            if (selectedLanguage == "Hindi") "कोई भी प्रश्न या विषय पूछें..."
-                            else "Ask any doubt, math problem, or topic..."
-                        )
+                        Text(aiStrings.aiPlaceholder)
                     },
                     maxLines = 3,
                     shape = RoundedCornerShape(18.dp),
@@ -427,6 +457,18 @@ fun AiTeacherScreen(
                 }
             }
         }
+    }
+
+    if (showAiLangSheet) {
+        LanguagePickerSheet(
+            currentLanguage = activeLang,
+            title = uiStrings.chooseLanguageTitle,
+            subtitle = uiStrings.chooseLanguageSubtitle,
+            onSelectLanguage = { lang ->
+                viewModel.setLanguage(lang.englishName)
+            },
+            onDismiss = { showAiLangSheet = false }
+        )
     }
 }
 

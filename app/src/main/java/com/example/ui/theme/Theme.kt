@@ -11,6 +11,7 @@ import androidx.compose.runtime.Composable
 import androidx.compose.ui.unit.dp
 import androidx.datastore.preferences.core.booleanPreferencesKey
 import androidx.datastore.preferences.core.edit
+import androidx.datastore.preferences.core.stringPreferencesKey
 import androidx.datastore.preferences.preferencesDataStore
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.map
@@ -19,6 +20,7 @@ private val Context.themeDataStore by preferencesDataStore(name = "textbook_them
 
 object ThemePreferences {
     private val DARK_MODE_KEY = booleanPreferencesKey("dark_mode_enabled")
+    private val APP_LANGUAGE_KEY = stringPreferencesKey("app_language_code")
 
     fun observeDarkMode(context: Context): Flow<Boolean?> =
         context.themeDataStore.data.map { prefs -> prefs[DARK_MODE_KEY] }
@@ -26,6 +28,15 @@ object ThemePreferences {
     suspend fun setDarkMode(context: Context, enabled: Boolean) {
         context.themeDataStore.edit { prefs ->
             prefs[DARK_MODE_KEY] = enabled
+        }
+    }
+
+    fun observeLanguageCode(context: Context): Flow<String> =
+        context.themeDataStore.data.map { prefs -> prefs[APP_LANGUAGE_KEY] ?: "en" }
+
+    suspend fun setLanguageCode(context: Context, code: String) {
+        context.themeDataStore.edit { prefs ->
+            prefs[APP_LANGUAGE_KEY] = code
         }
     }
 }

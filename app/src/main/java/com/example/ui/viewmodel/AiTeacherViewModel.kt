@@ -56,7 +56,8 @@ class AiTeacherViewModel(
     val pendingSubjectContext: StateFlow<String?> = _pendingSubjectContext.asStateFlow()
 
     fun setLanguage(lang: String) {
-        _selectedLanguage.value = if (lang == "Hindi") "Hindi" else "English"
+        val valid = com.example.ui.i18n.AppLanguages.byEnglishName(lang).englishName
+        _selectedLanguage.value = valid
     }
 
     fun attachParagraphContext(subject: String, paragraph: String) {

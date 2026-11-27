@@ -276,6 +276,23 @@ data class Announcement(
     @ServerTimestamp val createdAt: Timestamp? = null
 )
 
+@Keep
+@IgnoreExtraProperties
+data class LeaderboardEntry(
+    @DocumentId val id: String = "",
+    val userId: String = "",
+    val assessmentId: String = "",
+    val displayName: String = "Aspirant",
+    val examGoal: String = "SSC",
+    val scoreMarks: Long = 0L,
+    val maxMarks: Long = 10L,
+    val scorePercent: Long = 0L,
+    val correctCount: Long = 0L,
+    val incorrectCount: Long = 0L,
+    val durationSeconds: Long = 0L,
+    @ServerTimestamp val updatedAt: Timestamp? = null
+)
+
 data class SubscriptionPlan(
     val tierId: String,
     val name: String,

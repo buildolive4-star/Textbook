@@ -69,6 +69,7 @@ import com.example.data.model.CurriculumCatalog
 import com.example.data.model.ReadingProgress
 import com.example.data.model.Textbook
 import com.example.ui.components.TextbookCoverCard
+import com.example.ui.i18n.LocalAppStrings
 import com.example.ui.theme.AmberAccent
 import com.example.ui.theme.EmeraldSecondary
 import com.example.ui.theme.subjectColor
@@ -79,6 +80,7 @@ fun LibraryScreen(
     readingProgressList: List<ReadingProgress>,
     onOpenBook: (String) -> Unit
 ) {
+    val strings = LocalAppStrings.current
     var searchQuery by remember { mutableStateOf("") }
     var selectedCategory by remember { mutableStateOf("All") }
     var selectedSubject by remember { mutableStateOf("All") }
@@ -140,7 +142,7 @@ fun LibraryScreen(
                     ) {
                         Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
                             Text(
-                                text = "Digital Textbook Library",
+                                text = strings.digitalLibrary,
                                 style = MaterialTheme.typography.headlineSmall,
                                 color = Color.White,
                                 fontWeight = FontWeight.Bold
@@ -161,7 +163,7 @@ fun LibraryScreen(
             OutlinedTextField(
                 value = searchQuery,
                 onValueChange = { searchQuery = it },
-                placeholder = { Text("Search textbooks by title, class, or subject...") },
+                placeholder = { Text(strings.searchBooksPlaceholder) },
                 leadingIcon = { Icon(Icons.Filled.Search, contentDescription = "Search") },
                 singleLine = true,
                 shape = RoundedCornerShape(16.dp),
@@ -281,6 +283,7 @@ fun TextbookDetailScreen(
     onToggleSaveBook: () -> Unit,
     onOpenChapter: (chapterId: String) -> Unit
 ) {
+    val strings = LocalAppStrings.current
     val accent = subjectColor(book.subject)
     val completedSet = progress?.completedChapters.orEmpty().toSet()
     val bookmarkedChapters = progress?.bookmarkedPages.orEmpty()
@@ -443,7 +446,7 @@ fun TextbookDetailScreen(
                                     Icon(Icons.Filled.PlayArrow, contentDescription = null)
                                     Spacer(modifier = Modifier.width(6.dp))
                                     Text(
-                                        text = if (progress != null) "Continue" else "Start Reading",
+                                        text = if (progress != null) strings.continueReading else strings.startReading,
                                         fontWeight = FontWeight.Bold
                                     )
                                 }
@@ -470,7 +473,7 @@ fun TextbookDetailScreen(
             // Chapters Header
             item {
                 Text(
-                    text = "Chapters (${chapters.size})",
+                    text = "${strings.chapters} (${chapters.size})",
                     style = MaterialTheme.typography.titleLarge,
                     color = MaterialTheme.colorScheme.onBackground
                 )

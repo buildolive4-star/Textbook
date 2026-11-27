@@ -67,6 +67,9 @@ import androidx.credentials.CredentialManager
 import com.example.R
 import com.example.data.firebase.attemptAutoSignIn
 import com.example.data.firebase.onGoogleSignInClicked
+import com.example.ui.i18n.LanguagePillChip
+import com.example.ui.i18n.LocalAppLanguage
+import com.example.ui.i18n.LocalAppStrings
 import com.example.ui.theme.AmberAccent
 import com.example.ui.theme.EmeraldSecondary
 import com.example.ui.theme.NavyDark
@@ -75,8 +78,11 @@ import kotlinx.coroutines.delay
 
 @Composable
 fun SplashAndAuthScreen(
+    onOpenLanguagePicker: () -> Unit,
     onAuthSuccess: () -> Unit
 ) {
+    val strings = LocalAppStrings.current
+    val currentLanguage = LocalAppLanguage.current
     val context = LocalContext.current
     val scope = rememberCoroutineScope()
     val credentialManager = remember(context) { CredentialManager.create(context) }
@@ -124,6 +130,15 @@ fun SplashAndAuthScreen(
             )
             .windowInsetsPadding(WindowInsets.safeDrawing)
     ) {
+        // Top-right 15+ Indian Language selector
+        LanguagePillChip(
+            currentLanguage = currentLanguage,
+            onClick = onOpenLanguagePicker,
+            modifier = Modifier
+                .align(Alignment.TopEnd)
+                .padding(16.dp)
+        )
+
         Column(
             modifier = Modifier
                 .fillMaxSize()
@@ -158,7 +173,7 @@ fun SplashAndAuthScreen(
             Spacer(modifier = Modifier.height(16.dp))
 
             Text(
-                text = "TEXTBOOK",
+                text = strings.appName,
                 style = MaterialTheme.typography.displayMedium,
                 color = Color.White,
                 fontWeight = FontWeight.Bold
@@ -167,7 +182,7 @@ fun SplashAndAuthScreen(
             Spacer(modifier = Modifier.height(4.dp))
 
             Text(
-                text = stringResource(R.string.app_tagline),
+                text = strings.tagline,
                 style = MaterialTheme.typography.titleMedium,
                 color = EmeraldSecondary
             )
@@ -208,7 +223,7 @@ fun SplashAndAuthScreen(
                         verticalArrangement = Arrangement.spacedBy(12.dp)
                     ) {
                         Text(
-                            text = "Smart Digital Learning Platform",
+                            text = strings.authTitle,
                             style = MaterialTheme.typography.headlineSmall,
                             color = MaterialTheme.colorScheme.onSurface
                         )
@@ -225,7 +240,7 @@ fun SplashAndAuthScreen(
                             )
                             AuthFeatureRow(
                                 icon = Icons.Filled.AutoAwesome,
-                                text = "Gemini AI Teacher with 'Explain This Paragraph' (EN / हिंदी)"
+                                text = "AI Teacher in English, हिन्दी, தமிழ் & 12+ Indian Languages"
                             )
                             AuthFeatureRow(
                                 icon = Icons.Filled.Quiz,
@@ -293,7 +308,7 @@ fun SplashAndAuthScreen(
                                 )
                                 Spacer(modifier = Modifier.size(10.dp))
                                 Text(
-                                    text = stringResource(R.string.sign_in_with_google),
+                                    text = strings.signInWithGoogle,
                                     style = MaterialTheme.typography.labelLarge,
                                     color = Color.White
                                 )
