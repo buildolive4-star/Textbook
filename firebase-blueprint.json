@@ -1,0 +1,342 @@
+{
+  "entities": {
+    "UserProfile": {
+      "title": "UserProfile",
+      "description": "Student profile, academic onboarding preferences, learning stats, and plan tier.",
+      "type": "object",
+      "properties": {
+        "userId": { "type": "string", "description": "Firebase Auth UID matching document ID" },
+        "displayName": { "type": "string", "description": "Student display name (1..80 chars)" },
+        "email": { "type": "string", "description": "Optional email address" },
+        "board": { "type": "string", "enum": ["CBSE", "ICSE", "State Board", "Other"] },
+        "classLevel": { "type": "string", "description": "Class 1 through Class 12" },
+        "medium": { "type": "string", "enum": ["English", "Hindi", "Bilingual"] },
+        "academicSession": { "type": "string", "description": "Academic session e.g. 2026-27" },
+        "subjects": { "type": "array", "description": "Selected subjects (max 12)" },
+        "onboardingDone": { "type": "boolean", "description": "Whether student completed onboarding" },
+        "planTier": { "type": "string", "enum": ["FREE", "MONTHLY", "QUARTERLY", "HALF_YEARLY", "YEARLY"] },
+        "studyMinutesTotal": { "type": "integer", "description": "Cumulative study minutes" },
+        "streakDays": { "type": "integer", "description": "Consecutive learning streak in days" },
+        "aiQueriesToday": { "type": "integer", "description": "AI Teacher questions asked today" },
+        "lastBookId": { "type": "string", "description": "Last opened textbook ID" },
+        "lastChapterId": { "type": "string", "description": "Last opened chapter ID" },
+        "createdAt": { "type": "string", "format": "date-time", "description": "Server timestamp" },
+        "updatedAt": { "type": "string", "format": "date-time", "description": "Server timestamp" }
+      },
+      "required": [
+        "userId", "displayName", "board", "classLevel", "medium",
+        "academicSession", "subjects", "onboardingDone", "planTier",
+        "studyMinutesTotal", "streakDays", "aiQueriesToday", "createdAt", "updatedAt"
+      ]
+    },
+    "ReadingProgress": {
+      "title": "ReadingProgress",
+      "description": "Per-textbook reading position, completion progress, bookmarks, and highlights.",
+      "type": "object",
+      "properties": {
+        "userId": { "type": "string" },
+        "bookId": { "type": "string" },
+        "bookTitle": { "type": "string" },
+        "subject": { "type": "string" },
+        "lastChapterId": { "type": "string" },
+        "lastChapterNumber": { "type": "integer" },
+        "lastChapterTitle": { "type": "string" },
+        "lastPageIndex": { "type": "integer" },
+        "completedChapters": { "type": "array" },
+        "progressPercent": { "type": "integer" },
+        "bookmarkedPages": { "type": "array" },
+        "highlightedParagraphs": { "type": "array" },
+        "createdAt": { "type": "string", "format": "date-time" },
+        "updatedAt": { "type": "string", "format": "date-time" }
+      },
+      "required": [
+        "userId", "bookId", "bookTitle", "subject", "lastChapterId",
+        "lastChapterNumber", "lastChapterTitle", "lastPageIndex",
+        "completedChapters", "progressPercent", "bookmarkedPages",
+        "highlightedParagraphs", "createdAt", "updatedAt"
+      ]
+    },
+    "PersonalNote": {
+      "title": "PersonalNote",
+      "description": "Personal study note attached to a textbook chapter.",
+      "type": "object",
+      "properties": {
+        "userId": { "type": "string" },
+        "bookId": { "type": "string" },
+        "bookTitle": { "type": "string" },
+        "chapterId": { "type": "string" },
+        "chapterTitle": { "type": "string" },
+        "content": { "type": "string" },
+        "excerpt": { "type": "string" },
+        "createdAt": { "type": "string", "format": "date-time" },
+        "updatedAt": { "type": "string", "format": "date-time" }
+      },
+      "required": [
+        "userId", "bookId", "bookTitle", "chapterId", "chapterTitle",
+        "content", "createdAt", "updatedAt"
+      ]
+    },
+    "StudyTask": {
+      "title": "StudyTask",
+      "description": "Daily study goal or chapter target in the personal study planner.",
+      "type": "object",
+      "properties": {
+        "userId": { "type": "string" },
+        "title": { "type": "string" },
+        "subject": { "type": "string" },
+        "dueDate": { "type": "string" },
+        "targetMinutes": { "type": "integer" },
+        "completed": { "type": "boolean" },
+        "createdAt": { "type": "string", "format": "date-time" },
+        "updatedAt": { "type": "string", "format": "date-time" }
+      },
+      "required": [
+        "userId", "title", "subject", "dueDate", "targetMinutes",
+        "completed", "createdAt", "updatedAt"
+      ]
+    },
+    "QuizAttempt": {
+      "title": "QuizAttempt",
+      "description": "Completed practice quiz or online examination result record.",
+      "type": "object",
+      "properties": {
+        "userId": { "type": "string" },
+        "quizId": { "type": "string" },
+        "quizTitle": { "type": "string" },
+        "subject": { "type": "string" },
+        "mode": { "type": "string", "enum": ["QUIZ", "EXAM"] },
+        "totalQuestions": { "type": "integer" },
+        "correctCount": { "type": "integer" },
+        "incorrectCount": { "type": "integer" },
+        "unattemptedCount": { "type": "integer" },
+        "scorePercent": { "type": "integer" },
+        "durationSeconds": { "type": "integer" },
+        "weakTopics": { "type": "array" },
+        "createdAt": { "type": "string", "format": "date-time" }
+      },
+      "required": [
+        "userId", "quizId", "quizTitle", "subject", "mode",
+        "totalQuestions", "correctCount", "incorrectCount",
+        "unattemptedCount", "scorePercent", "durationSeconds",
+        "weakTopics", "createdAt"
+      ]
+    },
+    "AiChatMessage": {
+      "title": "AiChatMessage",
+      "description": "Message in a student's AI Teacher conversation history.",
+      "type": "object",
+      "properties": {
+        "userId": { "type": "string" },
+        "sessionId": { "type": "string" },
+        "sender": { "type": "string", "enum": ["USER", "AI"] },
+        "language": { "type": "string", "enum": ["English", "Hindi"] },
+        "subject": { "type": "string" },
+        "message": { "type": "string" },
+        "createdAt": { "type": "string", "format": "date-time" }
+      },
+      "required": ["userId", "sessionId", "sender", "language", "message", "createdAt"]
+    },
+    "SavedMaterial": {
+      "title": "SavedMaterial",
+      "description": "Bookmarked study material, video lecture, or textbook reference.",
+      "type": "object",
+      "properties": {
+        "userId": { "type": "string" },
+        "materialId": { "type": "string" },
+        "itemType": { "type": "string", "enum": ["NOTE", "VIDEO", "BOOK"] },
+        "title": { "type": "string" },
+        "subject": { "type": "string" },
+        "createdAt": { "type": "string", "format": "date-time" }
+      },
+      "required": ["userId", "materialId", "itemType", "title", "subject", "createdAt"]
+    },
+    "Textbook": {
+      "title": "Textbook",
+      "description": "Digital textbook metadata published by Admin or Teachers.",
+      "type": "object",
+      "properties": {
+        "title": { "type": "string" },
+        "subject": { "type": "string" },
+        "classLevel": { "type": "string" },
+        "category": { "type": "string", "enum": ["Class 1-5", "Class 6-8", "Class 9-10", "Class 11-12"] },
+        "board": { "type": "string", "enum": ["CBSE", "ICSE", "State Board", "Other"] },
+        "medium": { "type": "string", "enum": ["English", "Hindi", "Bilingual"] },
+        "academicYear": { "type": "string" },
+        "description": { "type": "string" },
+        "chapterCount": { "type": "integer" },
+        "premiumOnly": { "type": "boolean" },
+        "published": { "type": "boolean" },
+        "accentHex": { "type": "string" },
+        "createdBy": { "type": "string" },
+        "createdAt": { "type": "string", "format": "date-time" },
+        "updatedAt": { "type": "string", "format": "date-time" }
+      },
+      "required": [
+        "title", "subject", "classLevel", "category", "board", "medium",
+        "academicYear", "description", "chapterCount", "premiumOnly",
+        "published", "accentHex", "createdBy", "createdAt", "updatedAt"
+      ]
+    },
+    "Chapter": {
+      "title": "Chapter",
+      "description": "Ordered chapter content belonging to a textbook.",
+      "type": "object",
+      "properties": {
+        "bookId": { "type": "string" },
+        "chapterNumber": { "type": "integer" },
+        "title": { "type": "string" },
+        "summary": { "type": "string" },
+        "paragraphs": { "type": "array" },
+        "keyPoints": { "type": "array" },
+        "estimatedMinutes": { "type": "integer" },
+        "published": { "type": "boolean" },
+        "createdBy": { "type": "string" },
+        "createdAt": { "type": "string", "format": "date-time" },
+        "updatedAt": { "type": "string", "format": "date-time" }
+      },
+      "required": [
+        "bookId", "chapterNumber", "title", "summary", "paragraphs",
+        "keyPoints", "estimatedMinutes", "published", "createdBy",
+        "createdAt", "updatedAt"
+      ]
+    },
+    "StudyMaterial": {
+      "title": "StudyMaterial",
+      "description": "Published chapter notes, formula sheets, PYQs, sample papers, or video lectures.",
+      "type": "object",
+      "properties": {
+        "title": { "type": "string" },
+        "category": { "type": "string" },
+        "subject": { "type": "string" },
+        "classLevel": { "type": "string" },
+        "chapterTitle": { "type": "string" },
+        "description": { "type": "string" },
+        "contentBody": { "type": "string" },
+        "videoDurationMinutes": { "type": "integer" },
+        "premiumOnly": { "type": "boolean" },
+        "published": { "type": "boolean" },
+        "createdBy": { "type": "string" },
+        "createdAt": { "type": "string", "format": "date-time" },
+        "updatedAt": { "type": "string", "format": "date-time" }
+      },
+      "required": [
+        "title", "category", "subject", "classLevel", "chapterTitle",
+        "description", "contentBody", "videoDurationMinutes", "premiumOnly",
+        "published", "createdBy", "createdAt", "updatedAt"
+      ]
+    },
+    "Assessment": {
+      "title": "Assessment",
+      "description": "Practice quiz or timed online examination with native questions array.",
+      "type": "object",
+      "properties": {
+        "title": { "type": "string" },
+        "subject": { "type": "string" },
+        "classLevel": { "type": "string" },
+        "mode": { "type": "string", "enum": ["QUIZ", "EXAM"] },
+        "category": { "type": "string" },
+        "durationMinutes": { "type": "integer" },
+        "totalMarks": { "type": "integer" },
+        "instructions": { "type": "string" },
+        "questions": { "type": "array" },
+        "premiumOnly": { "type": "boolean" },
+        "published": { "type": "boolean" },
+        "createdBy": { "type": "string" },
+        "createdAt": { "type": "string", "format": "date-time" },
+        "updatedAt": { "type": "string", "format": "date-time" }
+      },
+      "required": [
+        "title", "subject", "classLevel", "mode", "category",
+        "durationMinutes", "totalMarks", "instructions", "questions",
+        "premiumOnly", "published", "createdBy", "createdAt", "updatedAt"
+      ]
+    },
+    "Announcement": {
+      "title": "Announcement",
+      "description": "Platform announcement or exam notification published by Admin or Teachers.",
+      "type": "object",
+      "properties": {
+        "title": { "type": "string" },
+        "body": { "type": "string" },
+        "category": { "type": "string", "enum": ["NEW_BOOK", "EXAM", "NOTES", "REMINDER", "GENERAL"] },
+        "targetAudience": { "type": "string" },
+        "published": { "type": "boolean" },
+        "createdBy": { "type": "string" },
+        "createdAt": { "type": "string", "format": "date-time" }
+      },
+      "required": [
+        "title", "body", "category", "targetAudience", "published", "createdBy", "createdAt"
+      ]
+    },
+    "RoleAssignment": {
+      "title": "RoleAssignment",
+      "description": "Trusted RBAC registry document for Admins and Teachers.",
+      "type": "object",
+      "properties": {
+        "uid": { "type": "string" },
+        "displayName": { "type": "string" },
+        "assignedSubjects": { "type": "array" },
+        "createdAt": { "type": "string", "format": "date-time" }
+      },
+      "required": ["uid", "displayName", "assignedSubjects", "createdAt"]
+    }
+  },
+  "firestore": {
+    "/users/{userId}": {
+      "schema": "UserProfile",
+      "description": "Private student profile and academic settings isolated per user."
+    },
+    "/users/{userId}/readingProgress/{bookId}": {
+      "schema": "ReadingProgress",
+      "description": "Per-book reading progress, bookmarks, and paragraph highlights."
+    },
+    "/users/{userId}/personalNotes/{noteId}": {
+      "schema": "PersonalNote",
+      "description": "Student's personal notes created while reading textbooks."
+    },
+    "/users/{userId}/studyTasks/{taskId}": {
+      "schema": "StudyTask",
+      "description": "Student's personal study planner tasks and daily goals."
+    },
+    "/users/{userId}/quizAttempts/{attemptId}": {
+      "schema": "QuizAttempt",
+      "description": "Student's quiz and online examination score reports."
+    },
+    "/users/{userId}/aiMessages/{messageId}": {
+      "schema": "AiChatMessage",
+      "description": "Student's AI Teacher chat history messages."
+    },
+    "/users/{userId}/savedMaterials/{materialId}": {
+      "schema": "SavedMaterial",
+      "description": "Student's saved notes, videos, and bookmarked items."
+    },
+    "/textbooks/{bookId}": {
+      "schema": "Textbook",
+      "description": "Published digital textbook catalog managed by Teachers and Admins."
+    },
+    "/textbooks/{bookId}/chapters/{chapterId}": {
+      "schema": "Chapter",
+      "description": "Chapters inside each published digital textbook."
+    },
+    "/studyMaterials/{materialId}": {
+      "schema": "StudyMaterial",
+      "description": "Published notes, formula sheets, PYQs, and video lectures."
+    },
+    "/assessments/{assessmentId}": {
+      "schema": "Assessment",
+      "description": "Published practice quizzes and online examinations."
+    },
+    "/announcements/{announcementId}": {
+      "schema": "Announcement",
+      "description": "Published platform notifications and announcements."
+    },
+    "/admins/{uid}": {
+      "schema": "RoleAssignment",
+      "description": "Trusted admin role registry."
+    },
+    "/teachers/{uid}": {
+      "schema": "RoleAssignment",
+      "description": "Trusted teacher role registry."
+    }
+  }
+}

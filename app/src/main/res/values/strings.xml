@@ -1,0 +1,20 @@
+<resources>
+    <string name="app_name">Textbook</string>
+    <string name="app_tagline">Learn Better, Grow Smarter.</string>
+    <string name="sign_in_with_google">Continue with Google</string>
+    <string name="onboarding_title">Personalize Your Classroom</string>
+    <string name="onboarding_subtitle">Choose your board, class, medium, and subjects to tailor your textbooks and quizzes.</string>
+    <string name="nav_home">Home</string>
+    <string name="nav_library">Books</string>
+    <string name="nav_ai">AI Tutor</string>
+    <string name="nav_practice">Practice</string>
+    <string name="nav_profile">Profile</string>
+    <string name="continue_reading">Continue Reading</string>
+    <string name="start_reading">Start Reading</string>
+    <string name="explain_paragraph">Explain This Paragraph</string>
+    <string name="ai_teacher_title">AI Teacher</string>
+    <string name="study_planner_title">Study Planner</string>
+    <string name="progress_report_title">Progress Report</string>
+    <string name="subscription_title">Subscription Plans</string>
+    <string name="educator_studio_title">Teacher &amp; Admin Studio</string>
+</resources>

@@ -1,0 +1,637 @@
+rules_version = '2';
+service cloud.firestore {
+  match /databases/{database}/documents {
+
+    // Global default-deny safety net
+    match /{document=**} {
+      allow read, write: if false;
+    }
+
+    // --- Primitive Helpers ---
+    function isSignedIn() {
+      return request.auth != null;
+    }
+
+    function isOwner(userId) {
+      return isSignedIn() && request.auth.uid == userId;
+    }
+
+    function isValidId(id) {
+      return id is string && id.size() >= 1 && id.size() <= 128 && id.matches('^[a-zA-Z0-9_\\-]+$');
+    }
+
+    function incoming() {
+      return request.resource.data;
+    }
+
+    function existing() {
+      return resource.data;
+    }
+
+    function isBootstrappedAdmin() {
+      return isSignedIn() &&
+        'email' in request.auth.token &&
+        'email_verified' in request.auth.token &&
+        request.auth.token.email == 'buildolive4@gmail.com' &&
+        request.auth.token.email_verified == true;
+    }
+
+    function isAdmin() {
+      return isBootstrappedAdmin() ||
+        (isSignedIn() && exists(/databases/$(database)/documents/admins/$(request.auth.uid)));
+    }
+
+    function isTeacher() {
+      return isSignedIn() && exists(/databases/$(database)/documents/teachers/$(request.auth.uid));
+    }
+
+    function isEducator() {
+      return isAdmin() || isTeacher();
+    }
+
+    function isStringList(val, maxLen) {
+      return val is list && val.size() <= maxLen && (val.size() == 0 || val[0] is string);
+    }
+
+    // --- Validation Blueprints (Anti-Update-Gap) ---
+
+    function isValidUserProfile(data) {
+      return data.userId is string && data.userId.size() >= 1 && data.userId.size() <= 128 &&
+        data.displayName is string && data.displayName.size() >= 1 && data.displayName.size() <= 80 &&
+        (!('email' in data) || data.email == null || (data.email is string && data.email.size() <= 120)) &&
+        data.board is string && data.board in ['CBSE', 'ICSE', 'State Board', 'Other'] &&
+        data.classLevel is string && data.classLevel.size() >= 2 && data.classLevel.size() <= 30 &&
+        data.medium is string && data.medium in ['English', 'Hindi', 'Bilingual'] &&
+        data.academicSession is string && data.academicSession.size() >= 4 && data.academicSession.size() <= 20 &&
+        isStringList(data.subjects, 12) &&
+        data.onboardingDone is bool &&
+        data.planTier is string && data.planTier in ['FREE', 'MONTHLY', 'QUARTERLY', 'HALF_YEARLY', 'YEARLY'] &&
+        data.studyMinutesTotal is int && data.studyMinutesTotal >= 0 && data.studyMinutesTotal <= 1000000 &&
+        data.streakDays is int && data.streakDays >= 0 && data.streakDays <= 10000 &&
+        data.aiQueriesToday is int && data.aiQueriesToday >= 0 && data.aiQueriesToday <= 10000 &&
+        (!('lastBookId' in data) || data.lastBookId == null || (data.lastBookId is string && data.lastBookId.size() <= 128)) &&
+        (!('lastChapterId' in data) || data.lastChapterId == null || (data.lastChapterId is string && data.lastChapterId.size() <= 128)) &&
+        data.createdAt is timestamp && data.createdAt <= request.time &&
+        data.updatedAt is timestamp && data.updatedAt <= request.time;
+    }
+
+    function isValidReadingProgress(data) {
+      return data.userId is string && data.userId.size() >= 1 && data.userId.size() <= 128 &&
+        data.bookId is string && data.bookId.size() >= 1 && data.bookId.size() <= 128 &&
+        data.bookTitle is string && data.bookTitle.size() >= 1 && data.bookTitle.size() <= 140 &&
+        data.subject is string && data.subject.size() >= 1 && data.subject.size() <= 60 &&
+        data.lastChapterId is string && data.lastChapterId.size() >= 1 && data.lastChapterId.size() <= 128 &&
+        data.lastChapterNumber is int && data.lastChapterNumber >= 1 && data.lastChapterNumber <= 100 &&
+        data.lastChapterTitle is string && data.lastChapterTitle.size() >= 1 && data.lastChapterTitle.size() <= 140 &&
+        data.lastPageIndex is int && data.lastPageIndex >= 0 && data.lastPageIndex <= 500 &&
+        isStringList(data.completedChapters, 60) &&
+        data.progressPercent is int && data.progressPercent >= 0 && data.progressPercent <= 100 &&
+        isStringList(data.bookmarkedPages, 100) &&
+        isStringList(data.highlightedParagraphs, 100) &&
+        data.createdAt is timestamp && data.createdAt <= request.time &&
+        data.updatedAt is timestamp && data.updatedAt <= request.time;
+    }
+
+    function isValidPersonalNote(data) {
+      return data.userId is string && data.userId.size() >= 1 && data.userId.size() <= 128 &&
+        data.bookId is string && data.bookId.size() >= 1 && data.bookId.size() <= 128 &&
+        data.bookTitle is string && data.bookTitle.size() >= 1 && data.bookTitle.size() <= 140 &&
+        data.chapterId is string && data.chapterId.size() >= 1 && data.chapterId.size() <= 128 &&
+        data.chapterTitle is string && data.chapterTitle.size() >= 1 && data.chapterTitle.size() <= 140 &&
+        data.content is string && data.content.size() >= 1 && data.content.size() <= 2000 &&
+        (!('excerpt' in data) || data.excerpt == null || (data.excerpt is string && data.excerpt.size() <= 500)) &&
+        data.createdAt is timestamp && data.createdAt <= request.time &&
+        data.updatedAt is timestamp && data.updatedAt <= request.time;
+    }
+
+    function isValidStudyTask(data) {
+      return data.userId is string && data.userId.size() >= 1 && data.userId.size() <= 128 &&
+        data.title is string && data.title.size() >= 1 && data.title.size() <= 140 &&
+        data.subject is string && data.subject.size() >= 1 && data.subject.size() <= 60 &&
+        data.dueDate is string && data.dueDate.size() >= 4 && data.dueDate.size() <= 24 &&
+        data.targetMinutes is int && data.targetMinutes >= 5 && data.targetMinutes <= 360 &&
+        data.completed is bool &&
+        data.createdAt is timestamp && data.createdAt <= request.time &&
+        data.updatedAt is timestamp && data.updatedAt <= request.time;
+    }
+
+    function isValidQuizAttempt(data) {
+      return data.userId is string && data.userId.size() >= 1 && data.userId.size() <= 128 &&
+        data.quizId is string && data.quizId.size() >= 1 && data.quizId.size() <= 128 &&
+        data.quizTitle is string && data.quizTitle.size() >= 1 && data.quizTitle.size() <= 140 &&
+        data.subject is string && data.subject.size() >= 1 && data.subject.size() <= 60 &&
+        data.mode is string && data.mode in ['QUIZ', 'EXAM'] &&
+        data.totalQuestions is int && data.totalQuestions >= 1 && data.totalQuestions <= 200 &&
+        data.correctCount is int && data.correctCount >= 0 && data.correctCount <= 200 &&
+        data.incorrectCount is int && data.incorrectCount >= 0 && data.incorrectCount <= 200 &&
+        data.unattemptedCount is int && data.unattemptedCount >= 0 && data.unattemptedCount <= 200 &&
+        data.scorePercent is int && data.scorePercent >= 0 && data.scorePercent <= 100 &&
+        data.durationSeconds is int && data.durationSeconds >= 0 && data.durationSeconds <= 14400 &&
+        isStringList(data.weakTopics, 12) &&
+        data.createdAt is timestamp && data.createdAt <= request.time;
+    }
+
+    function isValidAiChatMessage(data) {
+      return data.userId is string && data.userId.size() >= 1 && data.userId.size() <= 128 &&
+        data.sessionId is string && data.sessionId.size() >= 1 && data.sessionId.size() <= 64 &&
+        data.sender is string && data.sender in ['USER', 'AI'] &&
+        data.language is string && data.language in ['English', 'Hindi'] &&
+        (!('subject' in data) || data.subject == null || (data.subject is string && data.subject.size() <= 60)) &&
+        data.message is string && data.message.size() >= 1 && data.message.size() <= 8000 &&
+        data.createdAt is timestamp && data.createdAt <= request.time;
+    }
+
+    function isValidSavedMaterial(data) {
+      return data.userId is string && data.userId.size() >= 1 && data.userId.size() <= 128 &&
+        data.materialId is string && data.materialId.size() >= 1 && data.materialId.size() <= 128 &&
+        data.itemType is string && data.itemType in ['NOTE', 'VIDEO', 'BOOK'] &&
+        data.title is string && data.title.size() >= 1 && data.title.size() <= 140 &&
+        data.subject is string && data.subject.size() >= 1 && data.subject.size() <= 60 &&
+        data.createdAt is timestamp && data.createdAt <= request.time;
+    }
+
+    function isValidTextbook(data) {
+      return data.title is string && data.title.size() >= 2 && data.title.size() <= 140 &&
+        data.subject is string && data.subject.size() >= 2 && data.subject.size() <= 60 &&
+        data.classLevel is string && data.classLevel.size() >= 2 && data.classLevel.size() <= 30 &&
+        data.category is string && data.category in ['Class 1-5', 'Class 6-8', 'Class 9-10', 'Class 11-12'] &&
+        data.board is string && data.board in ['CBSE', 'ICSE', 'State Board', 'Other'] &&
+        data.medium is string && data.medium in ['English', 'Hindi', 'Bilingual'] &&
+        data.academicYear is string && data.academicYear.size() >= 4 && data.academicYear.size() <= 20 &&
+        data.description is string && data.description.size() >= 1 && data.description.size() <= 800 &&
+        data.chapterCount is int && data.chapterCount >= 0 && data.chapterCount <= 100 &&
+        data.premiumOnly is bool &&
+        data.published is bool &&
+        data.accentHex is string && data.accentHex.size() >= 7 && data.accentHex.size() <= 9 &&
+        data.createdBy is string && data.createdBy.size() >= 1 && data.createdBy.size() <= 128 &&
+        data.createdAt is timestamp && data.createdAt <= request.time &&
+        data.updatedAt is timestamp && data.updatedAt <= request.time;
+    }
+
+    function isValidChapter(data) {
+      return data.bookId is string && data.bookId.size() >= 1 && data.bookId.size() <= 128 &&
+        data.chapterNumber is int && data.chapterNumber >= 1 && data.chapterNumber <= 100 &&
+        data.title is string && data.title.size() >= 2 && data.title.size() <= 140 &&
+        data.summary is string && data.summary.size() >= 1 && data.summary.size() <= 1500 &&
+        isStringList(data.paragraphs, 30) && data.paragraphs.size() >= 1 &&
+        isStringList(data.keyPoints, 20) &&
+        data.estimatedMinutes is int && data.estimatedMinutes >= 1 && data.estimatedMinutes <= 180 &&
+        data.published is bool &&
+        data.createdBy is string && data.createdBy.size() >= 1 && data.createdBy.size() <= 128 &&
+        data.createdAt is timestamp && data.createdAt <= request.time &&
+        data.updatedAt is timestamp && data.updatedAt <= request.time;
+    }
+
+    function isValidStudyMaterial(data) {
+      return data.title is string && data.title.size() >= 2 && data.title.size() <= 140 &&
+        data.category is string && data.category.size() >= 2 && data.category.size() <= 50 &&
+        data.subject is string && data.subject.size() >= 2 && data.subject.size() <= 60 &&
+        data.classLevel is string && data.classLevel.size() >= 2 && data.classLevel.size() <= 30 &&
+        data.chapterTitle is string && data.chapterTitle.size() >= 1 && data.chapterTitle.size() <= 140 &&
+        data.description is string && data.description.size() >= 1 && data.description.size() <= 600 &&
+        data.contentBody is string && data.contentBody.size() >= 1 && data.contentBody.size() <= 6000 &&
+        data.videoDurationMinutes is int && data.videoDurationMinutes >= 0 && data.videoDurationMinutes <= 240 &&
+        data.premiumOnly is bool &&
+        data.published is bool &&
+        data.createdBy is string && data.createdBy.size() >= 1 && data.createdBy.size() <= 128 &&
+        data.createdAt is timestamp && data.createdAt <= request.time &&
+        data.updatedAt is timestamp && data.updatedAt <= request.time;
+    }
+
+    function isValidAssessment(data) {
+      return data.title is string && data.title.size() >= 2 && data.title.size() <= 140 &&
+        data.subject is string && data.subject.size() >= 2 && data.subject.size() <= 60 &&
+        data.classLevel is string && data.classLevel.size() >= 2 && data.classLevel.size() <= 30 &&
+        data.mode is string && data.mode in ['QUIZ', 'EXAM'] &&
+        data.category is string && data.category.size() >= 2 && data.category.size() <= 50 &&
+        data.durationMinutes is int && data.durationMinutes >= 1 && data.durationMinutes <= 180 &&
+        data.totalMarks is int && data.totalMarks >= 1 && data.totalMarks <= 500 &&
+        data.instructions is string && data.instructions.size() >= 1 && data.instructions.size() <= 800 &&
+        data.questions is list && data.questions.size() >= 1 && data.questions.size() <= 50 &&
+        data.questions[0] is map &&
+        data.premiumOnly is bool &&
+        data.published is bool &&
+        data.createdBy is string && data.createdBy.size() >= 1 && data.createdBy.size() <= 128 &&
+        data.createdAt is timestamp && data.createdAt <= request.time &&
+        data.updatedAt is timestamp && data.updatedAt <= request.time;
+    }
+
+    function isValidAnnouncement(data) {
+      return data.title is string && data.title.size() >= 2 && data.title.size() <= 120 &&
+        data.body is string && data.body.size() >= 2 && data.body.size() <= 600 &&
+        data.category is string && data.category in ['NEW_BOOK', 'EXAM', 'NOTES', 'REMINDER', 'GENERAL'] &&
+        data.targetAudience is string && data.targetAudience.size() >= 2 && data.targetAudience.size() <= 40 &&
+        data.published is bool &&
+        data.createdBy is string && data.createdBy.size() >= 1 && data.createdBy.size() <= 128 &&
+        data.createdAt is timestamp && data.createdAt <= request.time;
+    }
+
+    function isValidRoleAssignment(data) {
+      return data.uid is string && data.uid.size() >= 1 && data.uid.size() <= 128 &&
+        data.displayName is string && data.displayName.size() >= 1 && data.displayName.size() <= 80 &&
+        isStringList(data.assignedSubjects, 12) &&
+        data.createdAt is timestamp && data.createdAt <= request.time;
+    }
+
+    // --- User Profile & Private Subcollections ---
+    match /users/{userId} {
+      allow get: if isValidId(userId) && (isOwner(userId) || isAdmin());
+      allow list: if isAdmin();
+
+      allow create: if isValidId(userId) &&
+        isOwner(userId) &&
+        incoming().userId == request.auth.uid &&
+        incoming().keys().hasAll([
+          'userId', 'displayName', 'board', 'classLevel', 'medium',
+          'academicSession', 'subjects', 'onboardingDone', 'planTier',
+          'studyMinutesTotal', 'streakDays', 'aiQueriesToday', 'createdAt', 'updatedAt'
+        ]) &&
+        incoming().keys().hasOnly([
+          'userId', 'displayName', 'email', 'board', 'classLevel', 'medium',
+          'academicSession', 'subjects', 'onboardingDone', 'planTier',
+          'studyMinutesTotal', 'streakDays', 'aiQueriesToday',
+          'lastBookId', 'lastChapterId', 'createdAt', 'updatedAt'
+        ]) &&
+        isValidUserProfile(incoming());
+
+      allow update: if isSignedIn() &&
+        isValidId(userId) &&
+        isValidUserProfile(incoming()) &&
+        incoming().userId == existing().userId &&
+        incoming().createdAt == existing().createdAt && (
+          isAdmin() ||
+          (isOwner(userId) && incoming().diff(existing()).affectedKeys().hasOnly([
+            'displayName', 'email', 'board', 'classLevel', 'medium',
+            'academicSession', 'subjects', 'onboardingDone', 'planTier',
+            'studyMinutesTotal', 'streakDays', 'aiQueriesToday',
+            'lastBookId', 'lastChapterId', 'updatedAt'
+          ]))
+        );
+
+      allow delete: if isValidId(userId) && (isOwner(userId) || isAdmin());
+
+      // Reading Progress Subcollection
+      match /readingProgress/{bookId} {
+        allow get: if isValidId(bookId) && (isOwner(userId) || isAdmin());
+        allow list: if isOwner(userId) || isAdmin();
+
+        allow create: if isValidId(bookId) &&
+          isOwner(userId) &&
+          incoming().userId == request.auth.uid &&
+          incoming().bookId == bookId &&
+          incoming().keys().hasAll([
+            'userId', 'bookId', 'bookTitle', 'subject', 'lastChapterId',
+            'lastChapterNumber', 'lastChapterTitle', 'lastPageIndex',
+            'completedChapters', 'progressPercent', 'bookmarkedPages',
+            'highlightedParagraphs', 'createdAt', 'updatedAt'
+          ]) &&
+          incoming().keys().hasOnly([
+            'userId', 'bookId', 'bookTitle', 'subject', 'lastChapterId',
+            'lastChapterNumber', 'lastChapterTitle', 'lastPageIndex',
+            'completedChapters', 'progressPercent', 'bookmarkedPages',
+            'highlightedParagraphs', 'createdAt', 'updatedAt'
+          ]) &&
+          isValidReadingProgress(incoming());
+
+        allow update: if isSignedIn() &&
+          isValidId(bookId) &&
+          isValidReadingProgress(incoming()) &&
+          incoming().userId == existing().userId &&
+          incoming().bookId == existing().bookId &&
+          incoming().createdAt == existing().createdAt && (
+            isAdmin() ||
+            (isOwner(userId) && incoming().diff(existing()).affectedKeys().hasOnly([
+              'bookTitle', 'subject', 'lastChapterId', 'lastChapterNumber',
+              'lastChapterTitle', 'lastPageIndex', 'completedChapters',
+              'progressPercent', 'bookmarkedPages', 'highlightedParagraphs', 'updatedAt'
+            ]))
+          );
+
+        allow delete: if isValidId(bookId) && (isOwner(userId) || isAdmin());
+      }
+
+      // Personal Notes Subcollection
+      match /personalNotes/{noteId} {
+        allow get: if isValidId(noteId) && (isOwner(userId) || isAdmin());
+        allow list: if isOwner(userId) || isAdmin();
+
+        allow create: if isValidId(noteId) &&
+          isOwner(userId) &&
+          incoming().userId == request.auth.uid &&
+          incoming().keys().hasAll([
+            'userId', 'bookId', 'bookTitle', 'chapterId', 'chapterTitle',
+            'content', 'createdAt', 'updatedAt'
+          ]) &&
+          incoming().keys().hasOnly([
+            'userId', 'bookId', 'bookTitle', 'chapterId', 'chapterTitle',
+            'content', 'excerpt', 'createdAt', 'updatedAt'
+          ]) &&
+          isValidPersonalNote(incoming());
+
+        allow update: if isSignedIn() &&
+          isValidId(noteId) &&
+          isValidPersonalNote(incoming()) &&
+          incoming().userId == existing().userId &&
+          incoming().bookId == existing().bookId &&
+          incoming().chapterId == existing().chapterId &&
+          incoming().createdAt == existing().createdAt && (
+            isAdmin() ||
+            (isOwner(userId) && incoming().diff(existing()).affectedKeys().hasOnly([
+              'content', 'excerpt', 'updatedAt'
+            ]))
+          );
+
+        allow delete: if isValidId(noteId) && (isOwner(userId) || isAdmin());
+      }
+
+      // Study Planner Tasks Subcollection
+      match /studyTasks/{taskId} {
+        allow get: if isValidId(taskId) && (isOwner(userId) || isAdmin());
+        allow list: if isOwner(userId) || isAdmin();
+
+        allow create: if isValidId(taskId) &&
+          isOwner(userId) &&
+          incoming().userId == request.auth.uid &&
+          incoming().keys().hasAll([
+            'userId', 'title', 'subject', 'dueDate', 'targetMinutes',
+            'completed', 'createdAt', 'updatedAt'
+          ]) &&
+          incoming().keys().hasOnly([
+            'userId', 'title', 'subject', 'dueDate', 'targetMinutes',
+            'completed', 'createdAt', 'updatedAt'
+          ]) &&
+          isValidStudyTask(incoming());
+
+        allow update: if isSignedIn() &&
+          isValidId(taskId) &&
+          isValidStudyTask(incoming()) &&
+          incoming().userId == existing().userId &&
+          incoming().createdAt == existing().createdAt && (
+            isAdmin() ||
+            (isOwner(userId) && incoming().diff(existing()).affectedKeys().hasOnly([
+              'title', 'subject', 'dueDate', 'targetMinutes', 'completed', 'updatedAt'
+            ]))
+          );
+
+        allow delete: if isValidId(taskId) && (isOwner(userId) || isAdmin());
+      }
+
+      // Quiz & Exam Attempts Subcollection
+      match /quizAttempts/{attemptId} {
+        allow get: if isValidId(attemptId) && (isOwner(userId) || isAdmin() || isTeacher());
+        allow list: if isOwner(userId) || isAdmin() || isTeacher();
+
+        allow create: if isValidId(attemptId) &&
+          isOwner(userId) &&
+          incoming().userId == request.auth.uid &&
+          incoming().keys().hasAll([
+            'userId', 'quizId', 'quizTitle', 'subject', 'mode',
+            'totalQuestions', 'correctCount', 'incorrectCount',
+            'unattemptedCount', 'scorePercent', 'durationSeconds',
+            'weakTopics', 'createdAt'
+          ]) &&
+          incoming().keys().hasOnly([
+            'userId', 'quizId', 'quizTitle', 'subject', 'mode',
+            'totalQuestions', 'correctCount', 'incorrectCount',
+            'unattemptedCount', 'scorePercent', 'durationSeconds',
+            'weakTopics', 'createdAt'
+          ]) &&
+          isValidQuizAttempt(incoming());
+
+        allow update: if false;
+        allow delete: if isValidId(attemptId) && (isOwner(userId) || isAdmin());
+      }
+
+      // AI Teacher Chat History Subcollection
+      match /aiMessages/{messageId} {
+        allow get: if isValidId(messageId) && (isOwner(userId) || isAdmin());
+        allow list: if isOwner(userId) || isAdmin();
+
+        allow create: if isValidId(messageId) &&
+          isOwner(userId) &&
+          incoming().userId == request.auth.uid &&
+          incoming().keys().hasAll([
+            'userId', 'sessionId', 'sender', 'language', 'message', 'createdAt'
+          ]) &&
+          incoming().keys().hasOnly([
+            'userId', 'sessionId', 'sender', 'language', 'subject', 'message', 'createdAt'
+          ]) &&
+          isValidAiChatMessage(incoming());
+
+        allow update: if false;
+        allow delete: if isValidId(messageId) && (isOwner(userId) || isAdmin());
+      }
+
+      // Saved Study Materials Subcollection
+      match /savedMaterials/{materialId} {
+        allow get: if isValidId(materialId) && (isOwner(userId) || isAdmin());
+        allow list: if isOwner(userId) || isAdmin();
+
+        allow create: if isValidId(materialId) &&
+          isOwner(userId) &&
+          incoming().userId == request.auth.uid &&
+          incoming().materialId == materialId &&
+          incoming().keys().hasAll([
+            'userId', 'materialId', 'itemType', 'title', 'subject', 'createdAt'
+          ]) &&
+          incoming().keys().hasOnly([
+            'userId', 'materialId', 'itemType', 'title', 'subject', 'createdAt'
+          ]) &&
+          isValidSavedMaterial(incoming());
+
+        allow update: if false;
+        allow delete: if isValidId(materialId) && (isOwner(userId) || isAdmin());
+      }
+    }
+
+    // --- Shared Educational Catalog (Published items readable by signed-in students; managed by Admin/Teachers) ---
+
+    match /textbooks/{bookId} {
+      allow get: if isSignedIn() && isValidId(bookId) && (existing().published == true || isEducator());
+      allow list: if isSignedIn() && (existing().published == true || isEducator());
+
+      allow create: if isValidId(bookId) &&
+        isEducator() &&
+        incoming().createdBy == request.auth.uid &&
+        incoming().keys().hasAll([
+          'title', 'subject', 'classLevel', 'category', 'board', 'medium',
+          'academicYear', 'description', 'chapterCount', 'premiumOnly',
+          'published', 'accentHex', 'createdBy', 'createdAt', 'updatedAt'
+        ]) &&
+        incoming().keys().hasOnly([
+          'title', 'subject', 'classLevel', 'category', 'board', 'medium',
+          'academicYear', 'description', 'chapterCount', 'premiumOnly',
+          'published', 'accentHex', 'createdBy', 'createdAt', 'updatedAt'
+        ]) &&
+        isValidTextbook(incoming());
+
+      allow update: if isSignedIn() &&
+        isValidId(bookId) &&
+        isValidTextbook(incoming()) &&
+        incoming().createdBy == existing().createdBy &&
+        incoming().createdAt == existing().createdAt && (
+          isAdmin() ||
+          (isTeacher() && incoming().diff(existing()).affectedKeys().hasOnly([
+            'title', 'subject', 'classLevel', 'category', 'board', 'medium',
+            'academicYear', 'description', 'chapterCount', 'premiumOnly',
+            'published', 'accentHex', 'updatedAt'
+          ]))
+        );
+
+      allow delete: if isValidId(bookId) && isAdmin();
+
+      match /chapters/{chapterId} {
+        allow get: if isSignedIn() && isValidId(chapterId) && (existing().published == true || isEducator());
+        allow list: if isSignedIn() && (existing().published == true || isEducator());
+
+        allow create: if isValidId(bookId) &&
+          isValidId(chapterId) &&
+          isEducator() &&
+          incoming().bookId == bookId &&
+          incoming().createdBy == request.auth.uid &&
+          incoming().keys().hasAll([
+            'bookId', 'chapterNumber', 'title', 'summary', 'paragraphs',
+            'keyPoints', 'estimatedMinutes', 'published', 'createdBy',
+            'createdAt', 'updatedAt'
+          ]) &&
+          incoming().keys().hasOnly([
+            'bookId', 'chapterNumber', 'title', 'summary', 'paragraphs',
+            'keyPoints', 'estimatedMinutes', 'published', 'createdBy',
+            'createdAt', 'updatedAt'
+          ]) &&
+          isValidChapter(incoming()) &&
+          exists(/databases/$(database)/documents/textbooks/$(bookId));
+
+        allow update: if isSignedIn() &&
+          isValidId(chapterId) &&
+          isValidChapter(incoming()) &&
+          incoming().bookId == existing().bookId &&
+          incoming().createdBy == existing().createdBy &&
+          incoming().createdAt == existing().createdAt && (
+            isAdmin() ||
+            (isTeacher() && incoming().diff(existing()).affectedKeys().hasOnly([
+              'chapterNumber', 'title', 'summary', 'paragraphs',
+              'keyPoints', 'estimatedMinutes', 'published', 'updatedAt'
+            ]))
+          );
+
+        allow delete: if isValidId(chapterId) && isEducator();
+      }
+    }
+
+    match /studyMaterials/{materialId} {
+      allow get: if isSignedIn() && isValidId(materialId) && (existing().published == true || isEducator());
+      allow list: if isSignedIn() && (existing().published == true || isEducator());
+
+      allow create: if isValidId(materialId) &&
+        isEducator() &&
+        incoming().createdBy == request.auth.uid &&
+        incoming().keys().hasAll([
+          'title', 'category', 'subject', 'classLevel', 'chapterTitle',
+          'description', 'contentBody', 'videoDurationMinutes', 'premiumOnly',
+          'published', 'createdBy', 'createdAt', 'updatedAt'
+        ]) &&
+        incoming().keys().hasOnly([
+          'title', 'category', 'subject', 'classLevel', 'chapterTitle',
+          'description', 'contentBody', 'videoDurationMinutes', 'premiumOnly',
+          'published', 'createdBy', 'createdAt', 'updatedAt'
+        ]) &&
+        isValidStudyMaterial(incoming());
+
+      allow update: if isSignedIn() &&
+        isValidId(materialId) &&
+        isValidStudyMaterial(incoming()) &&
+        incoming().createdBy == existing().createdBy &&
+        incoming().createdAt == existing().createdAt && (
+          isAdmin() ||
+          (isTeacher() && incoming().diff(existing()).affectedKeys().hasOnly([
+            'title', 'category', 'subject', 'classLevel', 'chapterTitle',
+            'description', 'contentBody', 'videoDurationMinutes', 'premiumOnly',
+            'published', 'updatedAt'
+          ]))
+        );
+
+      allow delete: if isValidId(materialId) && isEducator();
+    }
+
+    match /assessments/{assessmentId} {
+      allow get: if isSignedIn() && isValidId(assessmentId) && (existing().published == true || isEducator());
+      allow list: if isSignedIn() && (existing().published == true || isEducator());
+
+      allow create: if isValidId(assessmentId) &&
+        isEducator() &&
+        incoming().createdBy == request.auth.uid &&
+        incoming().keys().hasAll([
+          'title', 'subject', 'classLevel', 'mode', 'category',
+          'durationMinutes', 'totalMarks', 'instructions', 'questions',
+          'premiumOnly', 'published', 'createdBy', 'createdAt', 'updatedAt'
+        ]) &&
+        incoming().keys().hasOnly([
+          'title', 'subject', 'classLevel', 'mode', 'category',
+          'durationMinutes', 'totalMarks', 'instructions', 'questions',
+          'premiumOnly', 'published', 'createdBy', 'createdAt', 'updatedAt'
+        ]) &&
+        isValidAssessment(incoming());
+
+      allow update: if isSignedIn() &&
+        isValidId(assessmentId) &&
+        isValidAssessment(incoming()) &&
+        incoming().createdBy == existing().createdBy &&
+        incoming().createdAt == existing().createdAt && (
+          isAdmin() ||
+          (isTeacher() && incoming().diff(existing()).affectedKeys().hasOnly([
+            'title', 'subject', 'classLevel', 'mode', 'category',
+            'durationMinutes', 'totalMarks', 'instructions', 'questions',
+            'premiumOnly', 'published', 'updatedAt'
+          ]))
+        );
+
+      allow delete: if isValidId(assessmentId) && isEducator();
+    }
+
+    match /announcements/{announcementId} {
+      allow get: if isSignedIn() && isValidId(announcementId) && (existing().published == true || isEducator());
+      allow list: if isSignedIn() && (existing().published == true || isEducator());
+
+      allow create: if isValidId(announcementId) &&
+        isEducator() &&
+        incoming().createdBy == request.auth.uid &&
+        incoming().keys().hasAll([
+          'title', 'body', 'category', 'targetAudience', 'published', 'createdBy', 'createdAt'
+        ]) &&
+        incoming().keys().hasOnly([
+          'title', 'body', 'category', 'targetAudience', 'published', 'createdBy', 'createdAt'
+        ]) &&
+        isValidAnnouncement(incoming());
+
+      allow update: if false;
+      allow delete: if isValidId(announcementId) && isAdmin();
+    }
+
+    // --- RBAC Role Registries ---
+    match /admins/{uid} {
+      allow get: if isValidId(uid) && (isOwner(uid) || isAdmin());
+      allow list: if isAdmin();
+      allow create: if isValidId(uid) && isAdmin() && incoming().uid == uid &&
+        incoming().keys().hasAll(['uid', 'displayName', 'assignedSubjects', 'createdAt']) &&
+        incoming().keys().hasOnly(['uid', 'displayName', 'assignedSubjects', 'createdAt']) &&
+        isValidRoleAssignment(incoming());
+      allow update, delete: if isValidId(uid) && isAdmin();
+    }
+
+    match /teachers/{uid} {
+      allow get: if isValidId(uid) && (isOwner(uid) || isAdmin());
+      allow list: if isAdmin();
+      allow create: if isValidId(uid) && isAdmin() && incoming().uid == uid &&
+        incoming().keys().hasAll(['uid', 'displayName', 'assignedSubjects', 'createdAt']) &&
+        incoming().keys().hasOnly(['uid', 'displayName', 'assignedSubjects', 'createdAt']) &&
+        isValidRoleAssignment(incoming());
+      allow update: if isSignedIn() && isValidId(uid) && isAdmin() &&
+        isValidRoleAssignment(incoming()) &&
+        incoming().uid == existing().uid &&
+        incoming().createdAt == existing().createdAt &&
+        incoming().diff(existing()).affectedKeys().hasOnly(['displayName', 'assignedSubjects']);
+      allow delete: if isValidId(uid) && isAdmin();
+    }
+  }
+}
