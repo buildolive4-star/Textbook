@@ -426,9 +426,17 @@ private fun AuthenticatedTextbookShell(
                         QuizAndExamScreen(
                             assessments = assessments,
                             attempts = quizAttempts,
-                            onRecordAttempt = { assessment, correct, incorrect, skipped, pct, secs, weak ->
+                            onRecordAttempt = { assessment, correct, incorrect, skipped, obtainedMarks, maxMarks, pct, secs, weak ->
                                 mainViewModel.submitQuizAttempt(
-                                    assessment, correct, incorrect, skipped, pct, secs, weak
+                                    assessment = assessment,
+                                    correctCount = correct,
+                                    incorrectCount = incorrect,
+                                    unattemptedCount = skipped,
+                                    obtainedMarks = obtainedMarks,
+                                    maxMarks = maxMarks,
+                                    scorePercent = pct,
+                                    durationSeconds = secs,
+                                    weakTopics = weak
                                 )
                             }
                         )

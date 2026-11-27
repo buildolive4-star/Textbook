@@ -101,6 +101,8 @@ fun QuizAndExamScreen(
         correctCount: Int,
         incorrectCount: Int,
         unattemptedCount: Int,
+        obtainedMarks: Int,
+        maxMarks: Int,
         scorePercent: Int,
         durationSeconds: Int,
         weakTopics: List<String>
@@ -374,6 +376,8 @@ fun QuizAndExamScreen(
                         correct,
                         incorrect,
                         unattempted,
+                        obtainedMarks,
+                        maxMarks,
                         pct,
                         elapsedSeconds,
                         weakTopics.distinct()
